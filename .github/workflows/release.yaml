@@ -1,15 +1,15 @@
 name: Release
 
-# Release MANUAL: so roda quando alguem dispara o workflow na aba Actions e informa a versao.
-# Publica no GitHub Packages (https://maven.pkg.github.com/bitubi-solutions/bitubi-inference-4j).
-# Limitacao: o job publica o classificador do Linux (linux-x86_64) do bitubi-inference-4j-native.
-# Os classificadores de macOS e Windows ainda nao sao publicados (nao verificado se o GitHub Packages
-# aceita republicar o mesmo POM e JAR principal a partir de outro job).
+# MANUAL release: only runs when someone triggers the workflow in the Actions tab and enters the version.
+# Publishes to GitHub Packages (https://maven.pkg.github.com/bitubi-solutions/bitubi-inference-4j).
+# Limitation: the job publishes the Linux classifier (linux-x86_64) of bitubi-inference-4j-native.
+# The macOS and Windows classifiers are not published yet (not verified whether GitHub Packages
+# accepts republishing the same POM and main JAR from another job).
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Versao a publicar (ex.: 0.1.0)"
+        description: "Version to publish (e.g. 0.1.0)"
         required: true
         type: string
 

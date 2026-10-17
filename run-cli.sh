@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Compatibilidade com os nomes antigos das variaveis de ambiente
+# Compatibility with the old environment variable names
 BI4J_JVM_ARGS="${BI4J_JVM_ARGS:-$JLAMA_JVM_ARGS}"
 BI4J_JVM_ARGS_EXTRA="${BI4J_JVM_ARGS_EXTRA:-$JLAMA_JVM_ARGS_EXTRA}"
 BI4J_PREINSTALLED_JAR="${BI4J_PREINSTALLED_JAR:-$JLAMA_PREINSTALLED_JAR}"
