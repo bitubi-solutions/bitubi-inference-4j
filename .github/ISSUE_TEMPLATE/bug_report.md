@@ -1,17 +1,17 @@
 ---
 name: Bug
-about: Algo não funciona como esperado
+about: Something does not work as expected
 labels: bug
 ---
 
-**Versão do aby:**
+**aby version:**
 
 **JDK (`java -version`):**
 
-**Sistema operacional e CPU:**
+**Operating system and CPU:**
 
-**Modelo (id e formato):**
+**Model (id and format):**
 
-**Comando executado:**
+**Command run:**
 
-**Saída / erro:**
+**Output / error:**

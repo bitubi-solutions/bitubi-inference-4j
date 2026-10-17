@@ -1,11 +1,11 @@
 ---
-name: Funcionalidade
-about: Sugerir uma melhoria ou recurso novo
+name: Feature
+about: Suggest an improvement or a new feature
 labels: enhancement
 ---
 
-**Problema que isto resolve:**
+**Problem this solves:**
 
-**Proposta:**
+**Proposal:**
 
-**Alternativas consideradas:**
+**Alternatives considered:**

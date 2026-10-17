@@ -1,10 +1,10 @@
-# Contribuindo
+# Contributing
 
-1. Faça um fork e crie uma branch.
-2. Rode `./mvnw verify` com JDK 25.
-3. Assine seus commits com `git commit -s` (Developer Certificate of Origin,
-   https://developercertificate.org/). PRs sem `Signed-off-by` não serão aceitos.
-4. Abra o PR descrevendo o que mudou e como testou.
+1. Fork the repository and create a branch.
+2. Run `./mvnw verify` with JDK 25.
+3. Sign off your commits with `git commit -s` (Developer Certificate of Origin,
+   https://developercertificate.org/). PRs without `Signed-off-by` will not be accepted.
+4. Open the PR describing what changed and how you tested it.
 
-Ao contribuir você declara ter o direito de licenciar sua contribuição sob a
+By contributing you declare that you have the right to license your contribution under the
 Apache License 2.0.
