@@ -1,80 +1,80 @@
-# Direção do motor: backends, build portável, C ou Rust, Valhalla
+# Engine direction: backends, portable build, C or Rust, Valhalla
 
-Data: 2026-10-12. Estado: **decisões do autor registadas; o desenho do build portável aguarda aprovação**.
+Date: 2026-10-12. Status: **author's decisions recorded; the portable build design awaits approval**.
 
-## 1. Decisões do autor
+## 1. Author's decisions
 
-- O backend `naive` é descartado. Ficam **Panama** (Java, Vector API) e **Native** (C com SIMD). A classe escalar virou um oráculo só de testes (`ScalarReferenceOperations`).
-- A **compilação portável** do código nativo é desejada.
-- A ideia é usar o poder do Java no motor e, depois, montar um cluster e um produto para empresas com modelos abertos pequenos (SLM) otimizados e ajustados (fine-tuned).
+- The `naive` backend is dropped. What remains is **Panama** (Java, Vector API) and **Native** (C with SIMD). The scalar class became a test-only oracle (`ScalarReferenceOperations`).
+- A **portable build** of the native code is wanted.
+- The idea is to use the power of Java in the engine and, later, build a cluster and an enterprise product with small open models (SLMs) that are optimized and fine-tuned.
 
-## 2. Evidências medidas (nesta máquina: Core Ultra 7 255H, JDK 25, WSL2)
+## 2. Measured evidence (on this machine: Core Ultra 7 255H, JDK 25, WSL2)
 
-- **O nativo é híbrido.** Só os GEMMs correm em C. `accumulate`, `saxpy`, `scale` e `quantize` são delegados ao Panama (Java).
-- **A resposta errada do nativo vinha de um defeito no driver de blocos do GEMM**, que não calculava o canto das sobras. O mesmo defeito existia no Panama, em `F32xF32`. Corrigido em C e em Java (`docs/backends.md`).
-- **Onde está a memória do Panama.** Com o Native Memory Tracking, a diferença de pico de RSS entre o Panama e o nativo foi quase toda **heap Java comprometido** (585 MB contra 328 MB numa medição); JIT, classes e threads são iguais nos dois. Os tensores (pesos, ativações, KV) ficam fora do heap e são iguais.
-- **O RSS varia muito entre execuções do mesmo backend** (o Panama deu de 793 a 1143 MB), porque depende de quanto o G1 expande o heap. Não se deve comparar backends por um único RSS; é preciso fixar o heap (`-Xmx`/`-Xms`) ou medir a taxa de alocação.
-- **Perfil de alocações (JFR) do Panama:** 84% a 87% da pressão de alocação eram `int[]` criados no laço quente do GEMM, pelos parâmetros variádicos de `getVector(species, int... )`, `get(int...)` e `set(float, int...)`. Não eram objetos `Vector`. Com sobrecargas de dois inteiros, esse `int[]` caiu para 5% (os `Float256Vector`, 12% de um volume bem menor, passaram a ser visíveis). **Efeito no tok/s: ainda não demonstrado** (ver secção 6).
+- **The native backend is hybrid.** Only the GEMMs run in C. `accumulate`, `saxpy`, `scale` and `quantize` are delegated to Panama (Java).
+- **The native backend's wrong answer came from a defect in the GEMM block driver**, which did not compute the corner of the leftovers. The same defect existed in Panama, in `F32xF32`. Fixed in C and in Java (`docs/backends.md`).
+- **Where Panama's memory goes.** With Native Memory Tracking, the difference in peak RSS between Panama and native was almost entirely **committed Java heap** (585 MB versus 328 MB in one measurement); JIT, classes and threads are the same in both. The tensors (weights, activations, KV) live outside the heap and are the same.
+- **RSS varies a lot between runs of the same backend** (Panama gave 793 to 1143 MB), because it depends on how much G1 expands the heap. Backends must not be compared by a single RSS; the heap must be fixed (`-Xmx`/`-Xms`) or the allocation rate measured.
+- **Allocation profile (JFR) of Panama:** 84% to 87% of the allocation pressure was `int[]` created in the GEMM hot loop, by the varargs parameters of `getVector(species, int... )`, `get(int...)` and `set(float, int...)`. They were not `Vector` objects. With two-int overloads, that `int[]` dropped to 5% (the `Float256Vector`s, 12% of a much smaller volume, became visible). **Effect on tok/s: not yet demonstrated** (see section 6).
 
-## 3. As value classes (Valhalla) reduzem o consumo do Panama?
+## 3. Do value classes (Valhalla) reduce Panama's consumption?
 
-Fatos verificados ([JEP 529](https://openjdk.org/jeps/529), JDK 26, "Closed / Delivered"):
-- A Vector API "vai ficar em incubação até que as funcionalidades necessárias do Projeto Valhalla estejam disponíveis como preview". A meta de longo prazo é tornar as classes atuais (baseadas em valor) em *value classes*.
-- Hoje o C2 trata as instâncias de `Vector` de forma especial para "superar limitações da análise de escape e evitar boxing"; o JEP afirma que nos benchmarks "todas as alocações de objetos são eliminadas".
-- O JEP **não diz nada sobre o consumo de memória**.
-- As datas do Valhalla (JEP 401 em preview no JDK 28 ou 29) vêm de fontes secundárias e conflitam; não há data confirmada. Não existe no JDK 25.
+Verified facts ([JEP 529](https://openjdk.org/jeps/529), JDK 26, "Closed / Delivered"):
+- The Vector API "will incubate until necessary features of Project Valhalla become available as preview features". The long-term goal is to turn the current (value-based) classes into *value classes*.
+- Today C2 treats `Vector` instances specially to "overcome limitations in escape analysis and avoid boxing"; the JEP states that in the benchmarks "all Java object allocations are elided".
+- The JEP **says nothing about memory consumption**.
+- The Valhalla dates (JEP 401 in preview in JDK 28 or 29) come from secondary sources and conflict; there is no confirmed date. It does not exist in JDK 25.
 
-Conclusão (inferência, não medida): **não é uma alavanca de memória.** Os pesos, o KV cache e as ativações estão fora do heap, e as value classes não os tocam. O que as value classes podem dar é **previsibilidade de desempenho** (menos dependência de o C2 conseguir eliminar o boxing). Os ganhos de memória e de GC que conseguimos hoje vêm de tirar alocações do laço quente, o que é possível já, em Java 25.
+Conclusion (inference, not measured): **it is not a memory lever.** The weights, the KV cache and the activations are outside the heap, and value classes do not touch them. What value classes can give is **performance predictability** (less dependence on C2 managing to eliminate boxing). The memory and GC gains we can get today come from removing allocations from the hot loop, which is already possible in Java 25.
 
-## 4. C ou Rust para o código nativo?
+## 4. C or Rust for the native code?
 
-O que o nativo precisa de ser: poucos milhares de linhas de kernels SIMD (GEMM quantizado), chamados por FFM, em Linux, Windows e macOS (x86_64 e ARM64), compilados sem ligação à CPU de quem compila.
+What the native code needs to be: a few thousand lines of SIMD kernels (quantized GEMM), called through FFM, on Linux, Windows and macOS (x86_64 and ARM64), compiled without being tied to the CPU of whoever compiles it.
 
-| Critério | C (hoje) | Rust |
+| Criterion | C (today) | Rust |
 |---|---|---|
-| Custo agora | zero: o código existe e passou a estar correto e testado | reescrita e nova validação de cada kernel |
-| SIMD x86 | intrínsecos (`immintrin.h`); variantes por ficheiro com `-mavx2`, `-mavx512f`... | `std::arch` com `#[target_feature]` por função, sem ficheiros separados; AVX-512 estável desde o Rust 1.89 (ago. 2025, segundo a imprensa técnica; confirmar nas notas oficiais) |
-| Seleção em tempo de execução | `__builtin_cpu_supports` ou CPUID | `is_x86_feature_detected!` (padrão da biblioteca padrão) |
-| Segurança de memória | manual (os defeitos de bordas que achámos são deste tipo) | verificação de limites e `unsafe` localizado, mas nos kernels o `unsafe` é inevitável |
-| Ligação com Java | `jextract` lê o cabeçalho C diretamente | `extern "C"` + `cbindgen` para gerar o cabeçalho, depois `jextract`: um passo a mais |
-| Compilação cruzada e CI | `gcc`/`clang` por plataforma, `Makefile` e `antrun` já existentes | `cargo` simplifica muito a cruzada e o empacotamento |
-| Equipa | C é o que existe | exige competência em Rust |
+| Cost now | zero: the code exists and is now correct and tested | rewrite and re-validation of every kernel |
+| x86 SIMD | intrinsics (`immintrin.h`); per-file variants with `-mavx2`, `-mavx512f`... | `std::arch` with `#[target_feature]` per function, no separate files; AVX-512 stable since Rust 1.89 (Aug. 2025, according to the tech press; confirm in the official notes) |
+| Runtime selection | `__builtin_cpu_supports` or CPUID | `is_x86_feature_detected!` (standard library default) |
+| Memory safety | manual (the edge defects we found are of this kind) | bounds checking and localized `unsafe`, but in the kernels `unsafe` is unavoidable |
+| Binding with Java | `jextract` reads the C header directly | `extern "C"` + `cbindgen` to generate the header, then `jextract`: one more step |
+| Cross-compilation and CI | `gcc`/`clang` per platform, `Makefile` and `antrun` already in place | `cargo` greatly simplifies cross-compilation and packaging |
+| Team | C is what exists | requires Rust skills |
 
-**Recomendação (opinião, ainda sem medição):** manter **C** e fazer o build portável agora; não reescrever em Rust por precaução. Justificação: o ganho de Rust (segurança e empacotamento) é real mas não está provado que compense a reescrita, e o risco imediato (CPUs antigas) resolve-se igual nos dois. Propor um **spike com limite de tempo**: portar só o kernel `F32xQ4` para Rust, medir desempenho e esforço contra o C, e decidir com evidência. Se o nativo continuar estratégico e o time quiser, Rust passa a opção forte.
+**Recommendation (opinion, not yet measured):** keep **C** and do the portable build now; do not rewrite in Rust as a precaution. Rationale: Rust's gain (safety and packaging) is real but it is not proven to be worth the rewrite, and the immediate risk (old CPUs) is solved the same way in both. Propose a **time-boxed spike**: port only the `F32xQ4` kernel to Rust, measure performance and effort against C, and decide with evidence. If native remains strategic and the team wants it, Rust becomes a strong option.
 
-Uma pergunta que pesa mais do que a linguagem: quanto do ganho do nativo o Java consegue alcançar? O prefill do nativo foi cerca de 2,4x mais rápido que o do Panama, mas o Panama ainda tem alocações no laço quente. Convém **esgotar o Java** (secção 6) antes de investir em reescrever nativo.
+A question that weighs more than the language: how much of the native gain can Java reach? Native prefill was about 2.4x faster than Panama's, but Panama still has allocations in the hot loop. It is worth **exhausting Java** (section 6) before investing in rewriting the native code.
 
-## 5. Build portável do nativo (proposta, aguarda aprovação)
+## 5. Portable native build (proposal, awaiting approval)
 
-Problema verificado: o Linux compila com `-march=native`, ou seja, para a CPU de quem compila; um JAR da CI pode terminar com `SIGILL` em CPUs mais antigas.
+Verified problem: Linux compiles with `-march=native`, that is, for the CPU of whoever compiles; a CI JAR can end with `SIGILL` on older CPUs.
 
-Desenho:
-1. **Base fixa:** o código comum compila para um alvo mínimo (x86-64-v2, ou v3 se AVX2 for o piso decidido; ARM64 com NEON).
-2. **Uma unidade de compilação por ISA**, cada uma com as suas flags: AVX2+FMA+F16C; AVX-VNNI; AVX-512 (+VNNI). No ARM: NEON, e dotprod/i8mm como variantes.
-3. **Seleção em tempo de execução** na inicialização, por CPUID, devolvendo uma tabela de funções; a flag Java que hoje só serve para escolher o caminho 512 passa a ser a máscara real de capacidades.
-4. **Testar todas as variantes numa única máquina** forçando a máscara de capacidades para baixo (os testes `TestNativeRemainderTiles` e `TestOperations` correm por variante).
-5. **Verificação automática:** `objdump` na unidade base para garantir que não contém instruções acima do piso; e execução na CI no runner de menor capacidade.
-6. Um artefato por sistema operacional e arquitetura (classificador já existente), publicado como hoje.
+Design:
+1. **Fixed baseline:** the common code compiles for a minimum target (x86-64-v2, or v3 if AVX2 is the chosen floor; ARM64 with NEON).
+2. **One compilation unit per ISA**, each with its own flags: AVX2+FMA+F16C; AVX-VNNI; AVX-512 (+VNNI). On ARM: NEON, and dotprod/i8mm as variants.
+3. **Runtime selection** at initialization, via CPUID, returning a function table; the Java flag that today only chooses the 512 path becomes the real capability mask.
+4. **Test every variant on a single machine** by forcing the capability mask down (the `TestNativeRemainderTiles` and `TestOperations` tests run per variant).
+5. **Automatic verification:** `objdump` on the baseline unit to ensure it contains no instructions above the floor; and a CI run on the lowest-capability runner.
+6. One artifact per operating system and architecture (existing classifier), published as today.
 
-Critérios de aceitação: o mesmo JAR dá o mesmo texto (referência do `SmokeTest`) em todas as variantes selecionáveis; nenhuma instrução acima do piso na unidade base; sem regressão de desempenho na variante mais alta em relação ao `-march=native` atual (medido em rodadas intercaladas).
+Acceptance criteria: the same JAR gives the same text (the `SmokeTest` reference) on every selectable variant; no instruction above the floor in the baseline unit; no performance regression in the highest variant compared with the current `-march=native` (measured in interleaved rounds).
 
-## 6. Experimento: alocações no laço quente do Panama (ramo `perf/no-varargs-alloc`)
+## 6. Experiment: allocations in Panama's hot loop (branch `perf/no-varargs-alloc`)
 
-Mudança: sobrecargas sem variádicos (`getOffset(i, j)`, `getVector(species, i, j)`, `get(i, j)`, `set(v, i, j)`) em `TensorShape`, `AbstractTensor`, `FloatBufferTensor` e `Q4ByteBufferTensor`; os métodos antigos ficam.
+Change: non-varargs overloads (`getOffset(i, j)`, `getVector(species, i, j)`, `get(i, j)`, `set(v, i, j)`) in `TensorShape`, `AbstractTensor`, `FloatBufferTensor` and `Q4ByteBufferTensor`; the old methods remain.
 
-- **Provado:** a pressão de alocação de `int[]` no kernel caiu de 87% para 5% (JFR). Os testes por operação, os blocos de borda, a seleção de backend e o teste de fumaça (saída igual à referência) passam: 28 testes, 0 falhas.
-- **Não provado:** o efeito em velocidade. Dois A/B (4 e depois 4 amostras) deram resultados contraditórios (os "depois" saíram piores, 12 contra 17 a 31 tok/s) mas num hospedeiro com carga média de 8 a 12 em 16 CPUs, com a carga do modelo a variar de 4 s a 18 s. Não permitem concluir nada, nem a favor nem contra. Repetir numa máquina calma, em cópias compiladas lado a lado, alternando antes e depois.
-- Decisão: **não integrar como otimização até haver o A/B**; fica no ramo como experimento.
+- **Proven:** the `int[]` allocation pressure in the kernel dropped from 87% to 5% (JFR). The per-operation tests, the edge tiles, backend selection and the smoke test (output equal to the reference) pass: 28 tests, 0 failures.
+- **Not proven:** the effect on speed. Two A/B runs (4 and then 4 samples) gave contradictory results (the "after" runs came out worse, 12 versus 17 to 31 tok/s) but on a host with a load average of 8 to 12 on 16 CPUs, with model loading varying from 4 s to 18 s. They do not allow any conclusion, neither for nor against. Repeat on a quiet machine, with copies built side by side, alternating before and after.
+- Decision: **do not merge as an optimization until the A/B exists**; it stays on the branch as an experiment.
 
-## 7. Direção do produto (hipóteses a validar, não fatos)
+## 7. Product direction (hypotheses to validate, not facts)
 
-- Para modelos pequenos (0,5B a 8B), o modelo cabe num nó. **"Cluster" tende a significar réplicas, roteamento, filas e isolamento entre clientes**, mais do que dividir um modelo por vários nós (que é o que o código distribuído atual faz e serve a modelos de dezenas de bilhões de parâmetros). Convém validar isto antes de priorizar o sub-projeto 3.
-- Modelos ajustados chegam como SafeTensors (LoRA já fundido) ou GGUF. O suporte a GGUF (spec em `2026-10-12-gguf-slice1-design.md`) e, mais tarde, a **adaptadores LoRA** (carregar vários adaptadores sobre um modelo base partilhado) podem reduzir muito a memória por cliente. O README antigo já listava LoRA como pendente.
-- **Lote contínuo de pedidos** (várias sessões em simultâneo no mesmo modelo) é o que decide a vazão por máquina. Não verifiquei se o motor atual o suporta; é uma pergunta aberta importante.
+- For small models (0.5B to 8B), the model fits on one node. **"Cluster" tends to mean replicas, routing, queues and isolation between customers**, more than splitting a model across several nodes (which is what the current distributed code does, and serves models with tens of billions of parameters). This is worth validating before prioritizing sub-project 3.
+- Fine-tuned models arrive as SafeTensors (LoRA already merged) or GGUF. Support for GGUF (spec in `2026-10-12-gguf-slice1-design.md`) and, later, for **LoRA adapters** (loading several adapters on top of a shared base model) can greatly reduce memory per customer. The old README already listed LoRA as pending.
+- **Continuous batching of requests** (several concurrent sessions on the same model) is what decides throughput per machine. I have not verified whether the current engine supports it; it is an important open question.
 
-## 8. Próximos passos propostos
+## 8. Proposed next steps
 
-1. Concluir o A/B do Panama e decidir sobre as sobrecargas.
-2. Aprovação do desenho do build portável (secção 5), depois plano e implementação, com o spike de Rust em paralelo e com limite de tempo.
-3. GGUF fatia 1 (spec já escrito, aguarda revisão).
-4. Investigar o lote contínuo e a viabilidade de adaptadores LoRA, antes de desenhar o cluster.
+1. Finish the Panama A/B and decide on the overloads.
+2. Approval of the portable build design (section 5), then plan and implementation, with the Rust spike in parallel and time-boxed.
+3. GGUF slice 1 (spec already written, awaiting review).
+4. Investigate continuous batching and the feasibility of LoRA adapters, before designing the cluster.

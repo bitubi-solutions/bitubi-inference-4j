@@ -1,41 +1,41 @@
-# DX em todo o produto (registo de intenção)
+# DX across the whole product (record of intent)
 
-Data: 2026-10-12. Estado: **intenção registada; nada desenhado nem implementado**. A revisão de cada
-componente fica para quando chegarmos a ele, e é nessa altura que se "acertam as contas".
+Date: 2026-10-12. Status: **intent recorded; nothing designed or implemented**. The review of each
+component is left for when we get to it, and that is when the "accounts get settled".
 
-## Princípio
+## Principle
 
-A experiência de quem usa o bitubi-inference-4j é um requisito do produto inteiro, não só do SDK.
-Cada componente é revisto como produto: do primeiro contacto ao primeiro resultado, nos erros, nos
-padrões e na documentação.
+The experience of whoever uses bitubi-inference-4j is a requirement of the whole product, not just of the SDK.
+Each component is reviewed as a product: from first contact to first result, in its errors, its
+defaults and its documentation.
 
-## Componentes a rever
+## Components to review
 
-| Componente | Quem o usa | Estado da revisão |
+| Component | Who uses it | Review status |
 |---|---|---|
-| SDK Java | quem integra o motor em apps | proposta inicial em `2026-10-12-sdk-dx-design.md` (aguarda aprovação) |
-| API REST (OpenAI e Anthropic) | clientes HTTP e SDKs de terceiros | por rever (sub-projeto 2) |
-| UI web | quem conversa com o modelo no navegador | por rever (sub-projeto 2, htmx + JTE) |
-| CLI `bi4j` | operadores e desenvolvedores | por rever |
-| Harness de agentes (`bi4j`) | quem usa o agente no terminal | por rever (último sub-projeto) |
-| Deploy (Docker, Helm, cluster) | operadores | por rever (sub-projeto 3) |
-| Documentação, exemplos e mensagens de erro | todos | por rever, transversal |
-| Instalação e build | quem compila ou publica | por rever |
+| Java SDK | whoever integrates the engine into apps | initial proposal in `2026-10-12-sdk-dx-design.md` (awaiting approval) |
+| REST API (OpenAI and Anthropic) | HTTP clients and third-party SDKs | to be reviewed (sub-project 2) |
+| Web UI | whoever chats with the model in the browser | to be reviewed (sub-project 2, htmx + JTE) |
+| `bi4j` CLI | operators and developers | to be reviewed |
+| Agent harness (`bi4j`) | whoever uses the agent in the terminal | to be reviewed (last sub-project) |
+| Deployment (Docker, Helm, cluster) | operators | to be reviewed (sub-project 3) |
+| Documentation, examples and error messages | everyone | to be reviewed, cross-cutting |
+| Installation and build | whoever compiles or publishes | to be reviewed |
 
-## Modelo de revisão (a aplicar a cada componente, quando chegar a vez)
+## Review model (to apply to each component, when its turn comes)
 
-1. **Primeiro sucesso:** tempo e passos do zero ao primeiro resultado útil, medidos num ambiente limpo.
-2. **Padrões:** o que funciona sem configuração; o que é obrigatório configurar e se isso é claro.
-3. **Erros:** cada falha comum diz a causa e a correção; testada.
-4. **Consistência:** nomes, flags, formatos e mensagens seguem o mesmo vocabulário (`bi4j`, `bitubi-inference-4j`).
-5. **Documentação e exemplos:** executáveis e verificados na CI.
-6. **Acessibilidade e plataformas:** UI acessível; comportamento igual em Linux, Windows e macOS.
+1. **First success:** time and steps from zero to the first useful result, measured in a clean environment.
+2. **Defaults:** what works without configuration; what must be configured and whether that is clear.
+3. **Errors:** each common failure states the cause and the fix; tested.
+4. **Consistency:** names, flags, formats and messages follow the same vocabulary (`bi4j`, `bitubi-inference-4j`).
+5. **Documentation and examples:** executable and verified in CI.
+6. **Accessibility and platforms:** accessible UI; same behavior on Linux, Windows and macOS.
 
-## Fricções já observadas (só as verificadas)
+## Friction already observed (verified items only)
 
-- Texto de ajuda da CLI e títulos ainda em inglês misturado com o idioma da documentação; decidir a política de idioma.
-- `--add-modules jdk.incubator.vector` é obrigatório e hoje falha sem orientação.
-- `generate(..., ntokens, ...)` é limite total de tokens e produz `Prompt exceeds max tokens` com valores baixos.
-- O README e os exemplos antigos citavam APIs que já não existiam (`Downloader`); a documentação precisa de teste automático.
+- CLI help text and headings still in English, mixed with the language of the documentation; decide the language policy.
+- `--add-modules jdk.incubator.vector` is mandatory and today fails without guidance.
+- `generate(..., ntokens, ...)` is a total token limit and produces `Prompt exceeds max tokens` with low values.
+- The README and the old examples cited APIs that no longer existed (`Downloader`); the documentation needs automated testing.
 
-Tudo o mais está por observar; não presumir problemas sem medir.
+Everything else is yet to be observed; do not assume problems without measuring.
