@@ -4,7 +4,7 @@ about: Something does not work as expected
 labels: bug
 ---
 
-**aby version:**
+**bitubi-inference-4j version:**
 
 **JDK (`java -version`):**
 

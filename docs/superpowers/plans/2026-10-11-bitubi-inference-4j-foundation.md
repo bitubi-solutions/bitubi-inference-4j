@@ -463,7 +463,7 @@ git mv bitubi-inference-4j-cli/src/main/java/ao/bitubi/inference4j/cli/JlamaCli.
 grep -rl "JlamaCli" . --exclude-dir=.git --exclude-dir=target | xargs sed -i 's/JlamaCli/Bi4jCli/g'
 ```
 
-In `Bi4jCli.java`, change the picocli command name to `bi4j` (look for `name = "jlama"` and replace it with `name = "aby"`).
+In `Bi4jCli.java`, change the picocli command name to `bi4j` (look for `name = "jlama"` and replace it with `name = "bi4j"`).
 
 - [ ] **Step 6: No reference to the old package is left**
 

@@ -20,7 +20,7 @@ Date: 2026-10-12. Status: **author's decisions recorded; the portable build desi
 
 Verified facts ([JEP 529](https://openjdk.org/jeps/529), JDK 26, "Closed / Delivered"):
 - The Vector API "will incubate until necessary features of Project Valhalla become available as preview features". The long-term goal is to turn the current (value-based) classes into *value classes*.
-- Today C2 treats `Vector` instances specially to "overcome limitations in escape analysis and avoid boxing"; the JEP states that in the benchmarks "all Java object allocations are elided".
+- Today C2 treats `Vector` instances specially to "overcome limitations in escape analysis and avoid boxing"; the JEP states that "all Java object allocations are elided" in one of its code examples (this refers to an example in the JEP, not to benchmark results).
 - The JEP **says nothing about memory consumption**.
 - The Valhalla dates (JEP 401 in preview in JDK 28 or 29) come from secondary sources and conflict; there is no confirmed date. It does not exist in JDK 25.
 
