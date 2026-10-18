@@ -1636,6 +1636,8 @@ public final class PanamaTensorOperations implements TensorOperations {
             np = n0 + (n - n0) / nc * nc;
             mnpack(mp, m, n0, np);
             mnpack(m0, mp, np, n);
+            // The corner where the row remainder and the column remainder meet must also be computed
+            mnpack(mp, m, np, n);
         }
 
         protected abstract int pickKernel(int m0, int m, int n0, int n);

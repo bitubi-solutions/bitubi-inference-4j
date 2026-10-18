@@ -181,6 +181,8 @@ void __attribute__((noinline)) gemm(int m0, int m, int n0, int n, void (*gemmPtr
     np = n0 + (n - n0) / nc * nc;
     gemm(mp, m, n0, np, gemmPtr, params);
     gemm(m0, mp, np, n, gemmPtr, params);
+    // The corner where the row remainder and the column remainder meet must also be computed
+    gemm(mp, m, np, n, gemmPtr, params);
 }
 
 #if defined(__ARM_NEON__)
