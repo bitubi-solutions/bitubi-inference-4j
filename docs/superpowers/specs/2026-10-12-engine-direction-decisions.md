@@ -64,7 +64,8 @@ Change: non-varargs overloads (`getOffset(i, j)`, `getVector(species, i, j)`, `g
 
 - **Proven:** the `int[]` allocation pressure in the kernel dropped from 87% to 5% (JFR). The per-operation tests, the edge tiles, backend selection and the smoke test (output equal to the reference) pass: 28 tests, 0 failures.
 - **Not proven:** the effect on speed. Two A/B runs (4 and then 4 samples) gave contradictory results (the "after" runs came out worse, 12 versus 17 to 31 tok/s) but on a host with a load average of 8 to 12 on 16 CPUs, with model loading varying from 4 s to 18 s. They do not allow any conclusion, neither for nor against. Repeat on a quiet machine, with copies built side by side, alternating before and after.
-- Decision: **do not merge as an optimization until the A/B exists**; it stays on the branch as an experiment.
+- Third A/B (2026-10-16, 3 alternating rounds per side, Panama only): **inconclusive because of noise** (load from 5.4 to 10.7; prefill medians 13.99 before and 11.57 after, overlapping ranges).
+- Author's decision (2026-10-18): **`d5504cf` stays as a refactor**, because GGUF and other branches already use the two-int overloads. It is not presented as an optimization: the effect on tok/s is **not measured**. The allocation gain (87% to 5% of `int[]`) is the only proven effect.
 
 ## 7. Product direction (hypotheses to validate, not facts)
 

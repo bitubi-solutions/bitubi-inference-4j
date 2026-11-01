@@ -17,14 +17,14 @@ package ao.bitubi.inference4j.tensor.operations;
 
 import ao.bitubi.inference4j.util.Bi4jProperties;
 import ao.bitubi.inference4j.util.MachineSpec;
+import java.lang.reflect.InvocationTargetException;
 import java.util.Locale;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Picks the tensor operations backend. Select it with {@code -Dbi4j.backend=<auto|panama|native>}
- * (the legacy {@code jlama.} prefix is also accepted). {@code auto}, the default, uses Panama (the Vector API),
- * which needs {@code --add-modules=jdk.incubator.vector}. The native backend is never chosen automatically.
+ * Picks the tensor operations backend. Select it with {@code -Dbi4j.backend=<auto|panama|native>}.
+ * {@code auto}, the default, uses Panama (the Vector API), which needs {@code --add-modules=jdk.incubator.vector}. The native backend is never chosen automatically.
  */
 public class TensorOperationsProvider {
     static {
@@ -61,16 +61,14 @@ public class TensorOperationsProvider {
      * Resolves which backend to use.
      *
      * @param requested value of {@code bi4j.backend}; null, empty or "auto" means automatic
-     * @param legacyNativeFlag value of the old {@code use_native_tensor_operations} flag (only used when auto)
      * @param vectorType the vector support detected on this machine
      */
-    static Backend resolveBackend(String requested, boolean legacyNativeFlag, MachineSpec.Type vectorType) {
+    static Backend resolveBackend(String requested, MachineSpec.Type vectorType) {
         String r = requested == null ? "auto" : requested.trim().toLowerCase(Locale.ROOT);
         if (r.isEmpty()) r = "auto";
 
         switch (r) {
             case "auto":
-                if (legacyNativeFlag) return Backend.NATIVE;
                 return requirePanama(vectorType);
             case "panama":
                 return requirePanama(vectorType);
@@ -91,10 +89,22 @@ public class TensorOperationsProvider {
         return Backend.PANAMA;
     }
 
+    /** True when the native constructor refused this CPU; {@code newInstance} wraps what the constructor throws. */
+    static boolean belowNativeFloor(Throwable t) {
+        return t instanceof InvocationTargetException && t.getCause() instanceof UnsupportedOperationException;
+    }
+
+    static IllegalStateException nativeUnavailable(Throwable t) {
+        return new IllegalStateException(
+            "The native backend was requested but is not available. Add 'ao.bitubi:bitubi-inference-4j-native' "
+                + "to the classpath, or use bi4j.backend=panama.",
+            t
+        );
+    }
+
     private TensorOperations pickImplementation() {
         Backend backend = resolveBackend(
             Bi4jProperties.getString("backend"),
-            Bi4jProperties.getBoolean("use_native_tensor_operations"),
             MachineSpec.VECTOR_TYPE
         );
 
@@ -106,13 +116,10 @@ public class TensorOperationsProvider {
                         "ao.bitubi.inference4j.tensor.operations.NativeSimdTensorOperations"
                     );
                     pick = nativeClazz.getConstructor().newInstance();
-                    // This will throw if no shared lib found
                 } catch (Throwable t) {
-                    throw new IllegalStateException(
-                        "The native backend was requested but is not available. Add 'ao.bitubi:bitubi-inference-4j-native' "
-                            + "to the classpath, or use bi4j.backend=panama.",
-                        t
-                    );
+                    if (!belowNativeFloor(t) || MachineSpec.VECTOR_TYPE == MachineSpec.Type.NONE) throw nativeUnavailable(t);
+                    logger.warn("Falling back to Panama: {}", t.getCause().getMessage());
+                    pick = new PanamaTensorOperations(MachineSpec.VECTOR_TYPE);
                 }
                 break;
             default:

@@ -18,9 +18,25 @@ java -Dbi4j.backend=panama ...      # auto (default) | panama | native
 ```
 
 - `auto` (default): Panama, which requires the Vector API (`--add-modules=jdk.incubator.vector`); without it, it fails with a message that says what to do. **It never picks native on its own.**
-- The old `jlama.backend` prefix is accepted. The old `use_native_tensor_operations=true` flag still selects native when the backend is `auto`.
+- The `jlama.` prefix and the `use_native_tensor_operations` flag were removed (no backward compatibility): only `bi4j.backend` selects the backend. If either one is set, the engine logs a single WARN with the new name and does **not** apply the value.
 - An explicit choice that cannot be satisfied fails with a message that says what to do: `auto` and `panama` without the Vector API enabled ask for `--add-modules=jdk.incubator.vector`; `native` without the module on the classpath asks for the artifact; an unknown name lists the valid ones.
 - The backend in use shows up in the log (`Using Panama Vector Operations (OffHeap)`) and in the `PERF` line of the performance test.
+
+## Native variants
+
+On x86-64 the library has an x86-64 base unit without AVX instructions, plus separate AVX2+FMA, AVX-VNNI and AVX-512+VNNI units. At run time it checks CPUID and the operating system's AVX state (`XGETBV`) before picking a variant. AVX2+FMA is the minimum to run the native backend. `auto` keeps picking Panama when the Vector API is available; asking for `native` on a CPU below the floor logs a warning and uses Panama.
+
+`bi4j.native.isa` caps the highest variant picked, so a lower variant can run on the same machine:
+
+```bash
+java -Dbi4j.backend=native -Dbi4j.native.isa=avx2 ...
+java -Dbi4j.backend=native -Dbi4j.native.isa=avxvnni ...
+java -Dbi4j.backend=native -Dbi4j.native.isa=auto ...
+```
+
+Accepted values: `auto`, `avx2`, `avxvnni`, `avx512`; on ARM64, `neon` and `neon-dotprod`. A cap above what the CPU supports selects the highest available variant below it and leaves a warning in the log. The list for the CPU appears in the log when the backend is created. On ARM64 the base unit is NEON; `neon-dotprod` is selected at run time (`sysctl` on macOS, `getauxval` on Linux).
+
+On Linux x86-64, `check-isa.sh` uses `objdump` to require all the objects, and to confirm that the base unit has no VEX/EVEX, that AVX2 has no AVX-VNNI/AVX-512, that AVX-VNNI has no AVX-512, and that the advanced units contain the expected instructions. The AVX-512 variant is compiled and inspected on CPUs without AVX-512, but must not be executed on them.
 
 ## Why native gave wrong answers (root cause, verified)
 
@@ -68,6 +84,12 @@ Notes:
 - **Speed:** prefill = prompt tokens per second; decode = generated tokens per second.
 - **Noise:** this machine varies a lot between sessions (an hour earlier Panama measured 24 and 8 tok/s). Only compare rounds interleaved in the same session. Two rounds per backend give the order of magnitude, not a confidence interval.
 
+## Memory for GGUF F16 models
+
+The GGUF loader widens F16 to F32 in `ByteBuffer.allocateDirect`. The Qwen2.5-0.5B F16 file used in this slice has 1,266,425,696 bytes; the widened weights take about 2.53 GB of direct memory (not counting the KV cache and temporaries). With the default direct limit observed on this machine (~1.94 GB) loading failed; the smoke test passed with `JAVA_TOOL_OPTIONS=-XX:MaxDirectMemorySize=4g`.
+
+Using `Arena`/`MemorySegment` to allocate outside `ByteBuffer` is technically possible, but it is not a small substitution: today `FloatBufferTensor` creates the segment from the `ByteBuffer`, and `AbstractModel.close()` closes the KV cache, with no shared owner or lifetime for the weights' memory. It would need ownership and closing of the weights' arena, and a guarantee that tensors and views do not outlive the model. It was neither implemented nor measured.
+
 ## Which one is the most efficient
 
 Among the working ones: **native**, on this hardware and this model, in prefill (about 2.4x) and in memory (about 28% less RSS); in decode the advantage is small and within the noise. Panama remains the default because it does not depend on a library compiled per operating system.
@@ -80,9 +102,9 @@ Among the working ones: **native**, on this hardware and this model, in prefill 
 
 ## Before making native the default
 
-1. **`-march=native` on Linux** (`bitubi-inference-4j-native/pom.xml`): the library is compiled for the CPU of whoever builds it. A JAR produced in CI can end with `SIGILL` on older CPUs, which contradicts the focus on older hardware. It must be compiled for a fixed baseline (for example AVX2) with the newer variants chosen at run time.
+1. **Portability between CPUs:** the native module now compiles an x86-64 base without AVX and picks AVX2+FMA, AVX-VNNI and AVX-512+VNNI kernels by CPUID. The native backend's floor is AVX2+FMA; on CPUs below it, a request for `native` falls back to Panama with a warning in the log. `check-isa.sh` checks the x86 objects in the Linux build.
 2. **Apple Silicon and Windows:** native was measured only on Linux x86.
-3. **Test coverage:** `TestOperations` only includes native when it is the active backend; there is now also `TestNativeRemainderTiles`, which always runs it.
+3. **Test coverage:** `TestOperations` only includes native when it is the active backend; there are now also `TestNativeRemainderTiles` and `TestNativeRemainderTilesExtended`, which always run it.
 4. **Model load:** native took longer to load (4.5 s versus 2.9 s); cause not investigated.
 
 ## Defects still open
