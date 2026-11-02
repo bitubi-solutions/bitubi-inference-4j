@@ -19,6 +19,7 @@ import ao.bitubi.inference4j.safetensors.tokenizer.BPETokenizer;
 import ao.bitubi.inference4j.safetensors.tokenizer.TokenizerModel;
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Map;
@@ -65,7 +66,14 @@ public class GPT2Tokenizer extends BPETokenizer {
 
     @Override
     protected String preProcess(String sentence) {
-        return sentence.codePoints().map(c -> alteredBytes.getOrDefault(c, c)).mapToObj(Character::toString).collect(Collectors.joining());
+        // Byte-level BPE works on the UTF-8 bytes of the text, each one shown as a printable character
+        byte[] utf8 = sentence.getBytes(StandardCharsets.UTF_8);
+        StringBuilder sb = new StringBuilder(utf8.length);
+        for (byte b : utf8) {
+            int unsigned = Byte.toUnsignedInt(b);
+            sb.appendCodePoint(alteredBytes.getOrDefault(unsigned, unsigned));
+        }
+        return sb.toString();
     }
 
     @Override
@@ -92,6 +100,28 @@ public class GPT2Tokenizer extends BPETokenizer {
             .map(c -> alteredBytes.inverse().getOrDefault(c, c))
             .mapToObj(Character::toString)
             .collect(Collectors.joining());
+    }
+
+    @Override
+    public Optional<byte[]> decodeBytes(long id) {
+        String s = model.vocabLookup.inverse().get(id);
+        if (s == null) return Optional.empty();
+        ByteArrayOutputStream out = new ByteArrayOutputStream(s.length());
+        s.codePoints().forEach(c -> {
+            int b = alteredBytes.inverse().getOrDefault(c, c);
+            if (b < 256) out.write(b);
+            else out.writeBytes(Character.toString(b).getBytes(StandardCharsets.UTF_8));
+        });
+        return Optional.of(out.toByteArray());
+    }
+
+    @Override
+    public String decode(long[] ids) {
+        // Join the bytes first: a character can be split between tokens
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        for (long id : ids)
+            decodeBytes(id).ifPresent(out::writeBytes);
+        return postProcess(new String(out.toByteArray(), StandardCharsets.UTF_8));
     }
 
     @Override

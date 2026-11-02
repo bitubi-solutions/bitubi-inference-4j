@@ -263,7 +263,7 @@ public class TestCorrectness {
             2930, 5310, 297, 624, 6398, 28804, 2, 28705, 13, 28789, 28766, 489, 11143, 28766, 28767, 13 };
 
         String out = tokenizer.decode(encoded);
-        Assert.assertEquals(prompt, out);
+        Assert.assertEquals(prompt.getPrompt(), out);
         Assert.assertArrayEquals(expected, encoded);
     }
 
@@ -291,7 +291,7 @@ public class TestCorrectness {
             128006, 78191, 128007, 271 };
 
         String out = tokenizer.decode(encoded);
-        Assert.assertEquals(prompt, out);
+        Assert.assertEquals(prompt.getPrompt(), out);
         Assert.assertArrayEquals(expected, encoded);
     }
 
@@ -338,7 +338,7 @@ public class TestCorrectness {
             128007, 271 };
 
         String out = tokenizer.decode(encoded);
-        Assert.assertEquals(prompt, out);
+        Assert.assertEquals(prompt.getPrompt(), out);
         Assert.assertArrayEquals(expected, encoded);
     }
 
