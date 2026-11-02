@@ -228,12 +228,9 @@
                 <file>conf/formatterConfig.xml</file>
               </eclipse>
 
-              <!-- make sure every file has the following copyright header.
-                optionally, Spotless can set copyright years by digging
-                through git history (see "license" section below) -->
-              <licenseHeader>
-                <file>conf/license-header</file>
-              </licenseHeader>
+              <!-- No licenseHeader step: files from Jlama keep their header plus a modification notice
+                (conf/license-header), files created by Bitubi Solutions use conf/license-header-new.
+                A single enforced header would rewrite one of the two. -->
             </java>
           </configuration>
         </plugin>
