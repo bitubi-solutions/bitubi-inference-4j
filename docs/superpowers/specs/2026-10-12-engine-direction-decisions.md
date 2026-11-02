@@ -66,6 +66,7 @@ Change: non-varargs overloads (`getOffset(i, j)`, `getVector(species, i, j)`, `g
 - **Not proven:** the effect on speed. Two A/B runs (4 and then 4 samples) gave contradictory results (the "after" runs came out worse, 12 versus 17 to 31 tok/s) but on a host with a load average of 8 to 12 on 16 CPUs, with model loading varying from 4 s to 18 s. They do not allow any conclusion, neither for nor against. Repeat on a quiet machine, with copies built side by side, alternating before and after.
 - Third A/B (2026-10-16, 3 alternating rounds per side, Panama only): **inconclusive because of noise** (load from 5.4 to 10.7; prefill medians 13.99 before and 11.57 after, overlapping ranges).
 - Author's decision (2026-10-18): **`d5504cf` stays as a refactor**, because GGUF and other branches already use the two-int overloads. It is not presented as an optimization: the effect on tok/s is **not measured**. The allocation gain (87% to 5% of `int[]`) is the only proven effect.
+- GitHub A/B (2026-11-02, same runner, 5 alternating rounds, see `docs/benchmarks/2026-11-02-github-ab.md`): 0 to 2.5% faster on Linux, Windows and macOS Intel, no regression; only Windows decode separates cleanly (+1.8%).
 
 ## 7. Product direction (hypotheses to validate, not facts)
 
