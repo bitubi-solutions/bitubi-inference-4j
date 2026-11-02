@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macos-latest e ARM (arm64); macos-15-intel e x86_64. Confirme os rotulos na documentacao do GitHub.
+        # macos-latest is ARM (arm64); macos-15-intel is x86_64. Confirm the labels in the GitHub documentation.
         os: [ ubuntu-latest, windows-latest, macos-latest, macos-15-intel ]
     runs-on: ${{ matrix.os }}
     defaults:
@@ -39,12 +39,12 @@ jobs:
             bitubi-inference-4j-tests/models
             bitubi-inference-4j-net/models
           key: models-qwen2.5-0.5b-jq4-tinyllama-q4
-      # TestSample baixa modelos de varios GB e e excluido da CI.
+      # TestSample downloads multi-GB models and is excluded from CI.
       - name: Compile, run tests, and package (JDK 25)
         id: build
         env:
           SMOKE_MODEL: "1"
-          SMOKE_RELAXED: "1" # a referencia de texto foi gravada em outro hardware: aqui so exige texto nao vazio
+          SMOKE_RELAXED: "1" # the reference text was recorded on other hardware: here it only requires non-empty text
         run: ./mvnw -B package '-Dtest=!TestSample' -Dsurefire.failIfNoSpecifiedTests=false
       - name: Upload failure diagnostics
         if: failure()
@@ -58,4 +58,4 @@ jobs:
         if: always()
         run: |
           docs/benchmarks/run-perf.sh "$JAVA_HOME" | tee perf.txt
-          { echo '### Desempenho em ${{ matrix.os }}'; echo '```'; cat perf.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          { echo '### Performance on ${{ matrix.os }}'; echo '```'; cat perf.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"

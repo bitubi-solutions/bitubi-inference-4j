@@ -1,86 +1,86 @@
-# bitubi-inference-4j: visão geral e fundação (sub-projeto 0)
+# bitubi-inference-4j: overview and foundation (sub-project 0)
 
-Data: 2026-10-11. Estado: aguardando revisão do autor.
+Date: 2026-10-11. Status: awaiting the author's review.
 
-## 1. Intenção
+## 1. Intent
 
-Continuar o Jlama (motor de inferência de LLMs em Java, upstream `tjake/jlama`, parado pelo dono) como um produto novo, **bitubi-inference-4j**, mantido pela organização `bitubi-solutions`.
+Continue Jlama (an LLM inference engine in Java, upstream `tjake/jlama`, abandoned by its owner) as a new product, **bitubi-inference-4j**, maintained by the `bitubi-solutions` organization.
 
-- **Identidade:** rebrand com nome novo, creditando o Jlama original (Apache 2.0).
-- **Modelo de negócio:** open core. Núcleo aberto (motor, SDK, servidor, cluster básico) em Apache 2.0. Extras enterprise pagos (operador Kubernetes, multi-tenant, SSO, cotas, auditoria, hospedagem, suporte) em repositório separado que depende do aberto via SPI, nunca o contrário.
-- **Critério de sucesso global:** um motor Java competitivo em hardware antigo, utilizável como SDK, servidor self-hosted (APIs OpenAI e Anthropic) e cluster que justifique migrar para a cloud.
+- **Identity:** rebrand with a new name, crediting the original Jlama (Apache 2.0).
+- **Business model:** open core. Open core (engine, SDK, server, basic cluster) under Apache 2.0. Paid enterprise extras (Kubernetes operator, multi-tenancy, SSO, quotas, auditing, hosting, support) in a separate repository that depends on the open one via SPI, never the other way around.
+- **Overall success criterion:** a Java engine that is competitive on old hardware, usable as an SDK, as a self-hosted server (OpenAI and Anthropic APIs), and as a cluster that justifies moving to the cloud.
 
-Premissas (do autor): `groupId` `ao.bitubi`, CLI `bi4j`, repositório migrado para `bitubi-solutions`.
+Assumptions (from the author): `groupId` `ao.bitubi`, CLI `bi4j`, repository migrated to `bitubi-solutions`.
 
-## 2. Decomposição em sub-projetos
+## 2. Breakdown into sub-projects
 
-Cada um tem seu próprio ciclo spec, plano e implementação.
+Each one has its own spec, plan and implementation cycle.
 
-| # | Sub-projeto | Depende de |
+| # | Sub-project | Depends on |
 |---|---|---|
-| 0 | Fundação: rename, atribuição, CI, migração, publicação de teste | nada |
-| 1 | Motor e SDK: modelos novos, otimização para hardware antigo, API estável | 0 |
-| 1b | Backend de GPU via WebGPU (spike primeiro) | 1 |
-| 2 | Servidor e UI: API OpenAI melhorada, API Anthropic, htmx + JTE sobre Spring Boot 4 | 1 |
-| 3 | Cluster para cloud: coordinator/worker evoluído (HA, autoscaling, descoberta de workers) | 2 |
-| 4 | Harness de agentes `bi4j` (tipo Claude Code), **por último**, após estabilizar o motor | 2 |
+| 0 | Foundation: rename, attribution, CI, migration, test publication | nothing |
+| 1 | Engine and SDK: new models, optimization for old hardware, stable API | 0 |
+| 1b | GPU backend via WebGPU (spike first) | 1 |
+| 2 | Server and UI: improved OpenAI API, Anthropic API, htmx + JTE on Spring Boot 4 | 1 |
+| 3 | Cluster for the cloud: evolved coordinator/worker (HA, autoscaling, worker discovery) | 2 |
+| 4 | `bi4j` agent harness (Claude Code style), **last**, after the engine stabilizes | 2 |
 
-Este spec detalha só o sub-projeto 0. Os demais têm intenção e restrições registradas abaixo, mas serão especificados quando chegar a vez.
+This spec details only sub-project 0. The others have their intent and constraints recorded below, but will be specified when their turn comes.
 
-### 2.1 Restrições já decididas para os próximos sub-projetos
+### 2.1 Constraints already decided for the next sub-projects
 
-- **Sub-projeto 1.** Alvo: JDK 25 LTS como mínimo e único suportado (decisão do autor; JDK 21 sai). A pesquisa (2026-10) não achou ganho de desempenho novo e comprovado entre JDK 21 e 26: a Vector API segue em incubação (JEP 529, JDK 26, sem mudanças substanciais desde o 25), e Valhalla (JEP 401) está previsto só como preview em JDK 28/29. Os ganhos para hardware antigo virão do motor: kernels de GEMM com fallback para CPUs sem AVX-512/AVX2, quantização agressiva, tiling para cache e threads, e modelos pequenos e eficientes (Phi, Gemma 3, Qwen3, Llama 3.2). Critério de pronto: benchmarks em CPU sem AVX-512.
-  - **Suporte a GGUF (requisito do autor).** O motor hoje lê apenas SafeTensors; GGUF é o formato mais usado para modelos quantizados e dá acesso direto ao ecossistema existente (Hugging Face, llama.cpp). Escopo: leitor de GGUF (metadados, tokenizer embutido, tensores), os tipos de quantização mais comuns (Q4_0, Q8_0 e as K-quants como Q4_K_M, Q5_K_M, Q6_K), com kernels de dequantização/GEMM para eles, e carregamento direto sem converter. Precisa de uma camada de abstração de formato de modelo (SafeTensors e GGUF atrás da mesma interface). Decisão em aberto para o spec do sub-projeto 1: quais arquiteturas ligar primeiro (Llama, Qwen, Gemma, Phi) e se o formato JQ4 próprio continua sendo suportado.
-- **Sub-projeto 1b (WebGPU).** Não verificado que exista binding Java maduro para WebGPU. Hipótese a testar: ligar `wgpu-native` via FFM (API final desde Java 22), com kernels de matmul/atenção em WGSL. **Começa com um spike** (carregar um modelo pequeno e medir tokens/s contra o caminho de CPU, num hardware antigo real) antes de qualquer compromisso de escopo. O backend deve ser opcional e cair para CPU se não houver GPU.
-- **Sub-projeto 2.** UI com htmx + JTE sobre Spring Boot 4 (base Java 17). Existem starter JTE para Boot 4 e htmx-spring-boot 5.x declarando compatibilidade, mas não há anúncio oficial juntando os três: validar versões no Maven Central antes de fixar. APIs: OpenAI (streaming, tools, embeddings, `/v1/models`) e Anthropic (`/v1/messages`, streaming, tool use).
-- **Sub-projeto 3.** O coordinator/worker open source deve evoluir a ponto de o self-hosted já justificar migrar para cloud (HA, autoscaling, descoberta, filas). O operador gerenciado fica no lado pago.
-- **Sub-projeto 4.** O harness consome os modelos pela API do servidor (sub-projeto 2). Risco conhecido: modelos locais pequenos são fracos em tool use; o harness deve usar prompts enxutos e poucas ferramentas bem definidas, com modelo remoto opcional.
+- **Sub-project 1.** Target: JDK 25 LTS as the minimum and only supported version (author's decision; JDK 21 is dropped). Research (2026-10) found no new, proven performance gain between JDK 21 and 26: the Vector API is still incubating (JEP 529, JDK 26, no substantial changes since 25), and Valhalla (JEP 401) is only expected as a preview in JDK 28/29. The gains for old hardware will come from the engine: GEMM kernels with a fallback for CPUs without AVX-512/AVX2, aggressive quantization, tiling for cache and threads, and small, efficient models (Phi, Gemma 3, Qwen3, Llama 3.2). Definition of done: benchmarks on a CPU without AVX-512.
+  - **GGUF support (author's requirement).** The engine today reads only SafeTensors; GGUF is the most widely used format for quantized models and gives direct access to the existing ecosystem (Hugging Face, llama.cpp). Scope: a GGUF reader (metadata, embedded tokenizer, tensors), the most common quantization types (Q4_0, Q8_0 and the K-quants such as Q4_K_M, Q5_K_M, Q6_K), with dequantization/GEMM kernels for them, and direct loading without conversion. It needs a model-format abstraction layer (SafeTensors and GGUF behind the same interface). Open decision for the sub-project 1 spec: which architectures to enable first (Llama, Qwen, Gemma, Phi) and whether the custom JQ4 format remains supported.
+- **Sub-project 1b (WebGPU).** Not verified that a mature Java binding for WebGPU exists. Hypothesis to test: bind `wgpu-native` via FFM (final API since Java 22), with matmul/attention kernels in WGSL. **It starts with a spike** (load a small model and measure tokens/s against the CPU path, on real old hardware) before any scope commitment. The backend must be optional and fall back to the CPU if there is no GPU.
+- **Sub-project 2.** UI with htmx + JTE on Spring Boot 4 (Java 17 baseline). There is a JTE starter for Boot 4 and htmx-spring-boot 5.x declaring compatibility, but no official announcement putting the three together: validate versions on Maven Central before pinning them. APIs: OpenAI (streaming, tools, embeddings, `/v1/models`) and Anthropic (`/v1/messages`, streaming, tool use).
+- **Sub-project 3.** The open source coordinator/worker must evolve to the point where self-hosting already justifies moving to the cloud (HA, autoscaling, discovery, queues). The managed operator stays on the paid side.
+- **Sub-project 4.** The harness consumes models through the server API (sub-project 2). Known risk: small local models are weak at tool use; the harness must use lean prompts and a few well-defined tools, with an optional remote model.
 
-## 3. Sub-projeto 0: fundação
+## 3. Sub-project 0: foundation
 
-Estado atual verificado: branch `main`, `origin` em `DumiJDev/Jlama`. O `git status` mostra quase todos os arquivos modificados, mas `git diff --ignore-cr-at-eol --stat` está vazio, ou seja, são só diferenças de fim de linha (CRLF/LF). 154 arquivos referenciam `com.github.tjake`. Versão atual `0.8.4`. Workflows: `unit-tests.yaml` e `release.yaml`. O `pom.xml` raiz referencia JDK 20, 21 e 22 em perfis.
+Verified current state: branch `main`, `origin` at `DumiJDev/Jlama`. `git status` shows almost every file as modified, but `git diff --ignore-cr-at-eol --stat` is empty, that is, they are only line-ending differences (CRLF/LF). 154 files reference `com.github.tjake`. Current version `0.8.4`. Workflows: `unit-tests.yaml` and `release.yaml`. The root `pom.xml` references JDK 20, 21 and 22 in profiles.
 
-### 3.1 Passos (um commit ou PR revisável cada)
+### 3.1 Steps (one reviewable commit or PR each)
 
-1. **Normalizar fim de linha.** Adicionar `.gitattributes` (`* text=auto eol=lf`) e renormalizar.
-2. **Migrar para `bitubi-solutions`.** Transferir ou recriar o repositório na organização, mantendo o histórico (preserva a autoria original) e adicionando `upstream` apontando para `tjake/jlama`.
-3. **Rename mecânico, num commit, sem mudança de comportamento:**
-   - Pacote `com.github.tjake.jlama` para `ao.bitubi.inference4j` (o hífen não é válido em pacote Java).
+1. **Normalize line endings.** Add `.gitattributes` (`* text=auto eol=lf`) and renormalize.
+2. **Migrate to `bitubi-solutions`.** Transfer or recreate the repository in the organization, keeping the history (preserves the original authorship) and adding `upstream` pointing to `tjake/jlama`.
+3. **Mechanical rename, in one commit, with no behavior change:**
+   - Package `com.github.tjake.jlama` to `ao.bitubi.inference4j` (the hyphen is not valid in a Java package).
    - `groupId` `ao.bitubi`; `artifactId`s `bitubi-inference-4j-core`, `-native`, `-net`, `-cli`, `-tests`, `-parent`.
    - CLI `bi4j` (`run-cli.sh`, `run-cli.bat`, jbang, Dockerfile, compose, kubernetes).
-   - `<revision>` reinicia em `0.1.0-SNAPSHOT`.
-4. **Atribuição (Apache 2.0).** `NOTICE` ("Este produto inclui software derivado do Jlama, © Tim Jake e colaboradores"), seção "Origem" no README, cabeçalhos de copyright originais preservados, arquivos modificados marcados, `conf/license-header` atualizado. Não usar o nome ou a marca do autor original para sugerir endosso.
-5. **Build e CI.** JDK 25 como mínimo e único alvo; CI em Linux, Windows e macOS (ARM e Intel); remover os perfis e fontes de JDK 20/21/22 (`jlama-native/src/main/java22` vira `java25`); workflow de release para o GitHub Packages.
-6. **Publicação.** Por decisão do autor, começa no GitHub Packages (`maven.pkg.github.com/bitubi-solutions/bitubi-inference-4j`); o Maven Central fica para depois (exige verificar o domínio `bitubi.ao`, ou usar `io.github.bitubi-solutions`).
-7. **Governança mínima.** `CONTRIBUTING`, DCO ou CLA (necessário antes de aceitar PR externo, para preservar a opção comercial), templates de issue.
+   - `<revision>` restarts at `0.1.0-SNAPSHOT`.
+4. **Attribution (Apache 2.0).** `NOTICE` ("Este produto inclui software derivado do Jlama, © Tim Jake e colaboradores", i.e. "This product includes software derived from Jlama, © Tim Jake and contributors"), an "Origin" section in the README, original copyright headers preserved, modified files marked, `conf/license-header` updated. Do not use the original author's name or brand to suggest endorsement.
+5. **Build and CI.** JDK 25 as the minimum and only target; CI on Linux, Windows and macOS (ARM and Intel); remove the JDK 20/21/22 profiles and sources (`jlama-native/src/main/java22` becomes `java25`); release workflow to GitHub Packages.
+6. **Publication.** By the author's decision, it starts on GitHub Packages (`maven.pkg.github.com/bitubi-solutions/bitubi-inference-4j`); Maven Central comes later (requires verifying the `bitubi.ao` domain, or using `io.github.bitubi-solutions`).
+7. **Minimal governance.** `CONTRIBUTING`, DCO or CLA (required before accepting external PRs, to preserve the commercial option), issue templates.
 
-### 3.2 Critério de pronto
+### 3.2 Definition of done
 
-- `./mvnw verify` verde na CI em JDK 25, em Linux, Windows e macOS.
-- `grep -ri tjake` fora de `NOTICE`, README e cabeçalhos de atribuição não retorna nada, exceto ids de modelo do Hugging Face (`tjake/...`) e o clone `tjake/sdkman-for-toolchains` no Dockerfile, que são nomes externos.
-- Artefato publicado no GitHub Packages.
-- Texto gerado idêntico ao de referência gravada antes do rename (temperatura 0, por JDK), e tokens/s dentro da faixa de variação do baseline (`docs/benchmarks/`).
-- Teste de fumaça: carrega um modelo pequeno e gera tokens, rodando na CI.
+- `./mvnw verify` green in CI on JDK 25, on Linux, Windows and macOS.
+- `grep -ri tjake` outside `NOTICE`, the README and attribution headers returns nothing, except Hugging Face model ids (`tjake/...`) and the `tjake/sdkman-for-toolchains` clone in the Dockerfile, which are external names.
+- Artifact published on GitHub Packages.
+- Generated text identical to the reference recorded before the rename (temperature 0, per JDK), and tokens/s within the variation range of the baseline (`docs/benchmarks/`).
+- Smoke test: loads a small model and generates tokens, running in CI.
 
-### 3.3 Riscos
+### 3.3 Risks
 
-- **`jlama-native`:** nomes de classe ou símbolos JNI ligados ao pacote antigo podem quebrar no rename. O teste de fumaça com modelo real detecta.
-- **Namespace Maven:** sem controle de `bitubi.ao`, usar o fallback.
-- **Divergência do upstream:** após o rename, merges do upstream ficam trabalhosos. Aceito, dado o rebrand.
-- **Modelos pré-quantizados:** os de `hf.co/tjake` usam o formato JQ4. Manter leitura compatível e decidir depois onde hospedar os próprios; com GGUF (sub-projeto 1) a dependência de modelos próprios diminui.
+- **`jlama-native`:** class names or JNI symbols tied to the old package may break in the rename. The smoke test with a real model detects it.
+- **Maven namespace:** without control of `bitubi.ao`, use the fallback.
+- **Divergence from upstream:** after the rename, merging from upstream becomes laborious. Accepted, given the rebrand.
+- **Pre-quantized models:** those at `hf.co/tjake` use the JQ4 format. Keep compatible reading and decide later where to host our own; with GGUF (sub-project 1) the dependency on our own models decreases.
 
-### 3.4 Testes
+### 3.4 Tests
 
-Os testes existentes passam sem alteração de lógica; mais o teste de fumaça acima.
+The existing tests pass with no logic changes; plus the smoke test above.
 
-## 4. Fora de escopo deste spec
+## 4. Out of scope for this spec
 
-Qualquer implementação dos sub-projetos 1 a 4 e do lado pago. Cada um terá seu spec.
+Any implementation of sub-projects 1 to 4 and of the paid side. Each one will have its own spec.
 
-## 5. Decisões posteriores (2026-10-11 e 2026-10-12)
+## 5. Later decisions (2026-10-11 and 2026-10-12)
 
-- **Nome do produto:** `bitubi-inference-4j` (substitui `aby-inference`). `groupId` `ao.bitubi`, pacote Java `ao.bitubi.inference4j`, artefatos `bitubi-inference-4j-{parent,core,native,net,cli,tests}`, comando da CLI `bi4j`. `bi4j` é também o harness de agentes (a CLI), decisão do autor em 2026-10-12.
-- **Panama por padrão no JDK 25.** O backend nativo (`jlama-native`) deu resposta errada no teste de fumaça no JDK 25 ("I'm sorry, but I can't assist with that." contra "The capital of France is Paris." com Panama). Passou a ser opt-in com `-Dbi4j.use_native_tensor_operations=true`. Causa-raiz (2026-10-12): o driver de blocos do GEMM não calculava o canto das sobras de linhas e colunas, em C e em Java; não era o JDK 25. Detalhes em `docs/backends.md`.
-- **Bytecode 21 com JDK 25 como único JDK.** O Spring Boot 3.3.x não lê classes versão 69; o alvo sobe para 25 junto com o upgrade do Spring (sub-projeto 2).
-- **Equipa de agentes** em `.claude/agents/` (motor, formatos, servidor, cluster, build, QA, GPU, marca, harness) e regras do projeto em `CLAUDE.md`. Regra do autor: nunca adicionar trailers do Claude em commits ou PRs.
-- **Baseline de desempenho** (Intel Core Ultra 7 255H, WSL2, JDK 25, Panama): `docs/benchmarks/baseline-intel-core-ultra-7-255h.md`.
+- **Product name:** `bitubi-inference-4j` (replaces `aby-inference`). `groupId` `ao.bitubi`, Java package `ao.bitubi.inference4j`, artifacts `bitubi-inference-4j-{parent,core,native,net,cli,tests}`, CLI command `bi4j`. `bi4j` is also the agent harness (the CLI), author's decision on 2026-10-12.
+- **Panama by default on JDK 25.** The native backend (`jlama-native`) gave a wrong answer in the smoke test on JDK 25 ("I'm sorry, but I can't assist with that." versus "The capital of France is Paris." with Panama). It became opt-in with `-Dbi4j.use_native_tensor_operations=true`. Root cause (2026-10-12): the GEMM block driver did not compute the corner of the leftover rows and columns, in C and in Java; it was not JDK 25. Details in `docs/backends.md`.
+- **Bytecode 21 with JDK 25 as the only JDK.** Spring Boot 3.3.x cannot read class version 69; the target moves up to 25 together with the Spring upgrade (sub-project 2).
+- **Agent team** in `.claude/agents/` (engine, formats, server, cluster, build, QA, GPU, brand, harness) and project rules in `CLAUDE.md`. Author's rule: never add Claude trailers to commits or PRs.
+- **Performance baseline** (Intel Core Ultra 7 255H, WSL2, JDK 25, Panama): `docs/benchmarks/baseline-intel-core-ultra-7-255h.md`.

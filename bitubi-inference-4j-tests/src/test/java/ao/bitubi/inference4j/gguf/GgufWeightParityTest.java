@@ -48,9 +48,9 @@ public class GgufWeightParityTest {
             }
             assertEquals(name,0,raw.remaining());
         }
-        assertTrue("GGUF sem tensores quantizados suportados",q4Tensors + q8Tensors > 0);
-        System.out.println("Repack Q4_0: " + q4Tensors + " tensores, " + q4.elements + " valores, comparação float exata com os bytes GGUF");
-        System.out.println("Repack Q8_0: " + q8Tensors + " tensores, " + q8.elements + " valores, comparação float exata com os bytes GGUF");
+        assertTrue("GGUF has no supported quantized tensors",q4Tensors + q8Tensors > 0);
+        System.out.println("Repack Q4_0: " + q4Tensors + " tensors, " + q4.elements + " values, exact float comparison with the GGUF bytes");
+        System.out.println("Repack Q8_0: " + q8Tensors + " tensors, " + q8.elements + " values, exact float comparison with the GGUF bytes");
         if (reference != null) {
             if (q4.elements > 0) q4.print("Q4_0 vs F16");
             if (q8.elements > 0) q8.print("Q8_0 vs F16");

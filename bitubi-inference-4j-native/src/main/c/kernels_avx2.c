@@ -1,8 +1,8 @@
-/* Unidade AVX2 + FMA (o piso x86 do nativo). Flags: -mavx2 -mfma (ver Makefile). */
+/* AVX2 + FMA unit (the native x86 floor). Flags: -mavx2 -mfma (see Makefile). */
 #include "kernels.h"
 
 #if !defined(__AVX2__) || !defined(__FMA__)
-#error "kernels_avx2.c exige -mavx2 -mfma"
+#error "kernels_avx2.c requires -mavx2 -mfma"
 #endif
 
 #include "kernels_x86_256.inc"

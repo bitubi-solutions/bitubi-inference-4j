@@ -1,8 +1,8 @@
-## Resumo
+## Summary
 
-## Como testar
+## How to test
 
 ## Checklist
 
-- [ ] `./mvnw verify` verde com JDK 25
-- [ ] Commits assinados (`git commit -s`)
+- [ ] `./mvnw verify` green with JDK 25
+- [ ] Signed-off commits (`git commit -s`)

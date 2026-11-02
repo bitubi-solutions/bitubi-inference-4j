@@ -6,7 +6,7 @@ import java.util.*;
 public final class GgufTokenizerFactory {
     private GgufTokenizerFactory() {}
     public static TokenizerModel create(Map<String, Object> m) {
-        if (!"gpt2".equals(m.get("tokenizer.ggml.model"))) throw new IllegalArgumentException("Tokenizer GGUF nao suportado: " + m.get("tokenizer.ggml.model"));
+        if (!"gpt2".equals(m.get("tokenizer.ggml.model"))) throw new IllegalArgumentException("Unsupported GGUF tokenizer: " + m.get("tokenizer.ggml.model"));
         List<String> tokens = (List<String>) m.get("tokenizer.ggml.tokens");
         List<String> merges = (List<String>) m.get("tokenizer.ggml.merges");
         Map<String, Long> vocab = new LinkedHashMap<>();

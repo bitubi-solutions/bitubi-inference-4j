@@ -1,4 +1,4 @@
-/* Kernels de 256 bits (AVX2 + FMA). Incluido por kernels_avx2.c e kernels_avxvnni.c; nao compilar sozinho. */
+/* 256-bit kernels (AVX2 + FMA). Included by kernels_avx2.c and kernels_avxvnni.c; do not compile on its own. */
 #include <immintrin.h>
 
 static void __attribute__((noinline)) gemm_q8_q4_256(int m0, int m, int n0, int n, int RM, int RN, struct gemm_params params) {

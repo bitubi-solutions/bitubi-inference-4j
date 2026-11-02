@@ -11,11 +11,11 @@
 
 //Flags passes in at runtime
 #define HAS_F16C 2
-#define HAS_AVX2 4 // legado: ja nao seleciona nada, a ISA e escolhida pela CPU (ver BI4J_ISA_CAP_SHIFT)
+#define HAS_AVX2 4 // legacy: no longer selects anything, the ISA is chosen by the CPU (see BI4J_ISA_CAP_SHIFT)
 #define IS_M_SERIES_MAC 8
 
-// Nivel de ISA: 1 = AVX2+FMA (NEON no ARM64), 2 = AVX-VNNI, 3 = AVX-512 (F, BW, DQ, VL, VNNI).
-// Os bits 8..11 de "flags" sao um teto (0 = sem teto): a CPU escolhe o nivel mais alto suportado ate ao teto.
+// ISA level: 1 = AVX2+FMA (NEON no ARM64), 2 = AVX-VNNI, 3 = AVX-512 (F, BW, DQ, VL, VNNI).
+// Bits 8..11 of "flags" are a ceiling (0 = no ceiling): the CPU picks the highest supported level up to the ceiling.
 #define BI4J_ISA_AVX2 1
 #define BI4J_ISA_NEON 1
 #define BI4J_ISA_NEON_DOTPROD 2
@@ -24,9 +24,9 @@
 #define BI4J_ISA_CAP_SHIFT 8
 #define BI4J_ISA_CAP_MASK 15
 
-// Mascara dos niveis que esta CPU (e este SO) suportam: o bit "1 << nivel" esta ligado se o nivel esta disponivel.
+// Mask of the levels this CPU (and this OS) supports: bit "1 << level" is set if the level is available.
 int bi4j_supported_isas(void);
-// Nivel que seria usado com estas flags (0 = a CPU nao tem o minimo e o nativo nao pode ser usado).
+// Level that would be used with these flags (0 = the CPU lacks the minimum and native cannot be used).
 int bi4j_selected_isa(int flags);
 
 // Info for quantization

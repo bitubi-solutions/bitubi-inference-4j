@@ -1,13 +1,13 @@
 /**
  * @file vector_simd.c
- * @brief SIMD accelerated matrix multiplication (unidade base: driver, API publica e despacho por ISA)
+ * @brief SIMD accelerated matrix multiplication (base unit: tile driver, public API and per-ISA dispatch)
  *
  * SIMD accelerated matrix multiplication.  Derived from the work of
  *  J. Tunney, ‘LLaMA Now Goes Faster on CPUs’, Mar. 2024. [Online].
  *  Available: https://justine.lol/matmul/. [Accessed: 29-Mar-2024].
  *
- * Esta unidade NAO usa instrucoes acima do x86-64 generico (verificado por check-isa.sh): os kernels vivem em
- * kernels_<isa>.c, cada um com as suas flags, e a CPU decide qual usar em tempo de execucao.
+ * This unit does NOT use instructions above generic x86-64 (verified by check-isa.sh): the kernels live in
+ * kernels_<isa>.c, each with its own flags, and the CPU decides which to use at run time.
  */
 #include "kernels.h"
 #include <stdatomic.h>
@@ -138,7 +138,7 @@ void __attribute__((noinline)) gemm(int m0, int m, int n0, int n, void (*gemmPtr
     gemm(mp, m, np, n, gemmPtr, params);
 }
 
-///// Deteccao da CPU e despacho
+///// CPU detection and dispatch
 
 #if !BI4J_ARM
 static int detect_isas(void) {
@@ -148,7 +148,7 @@ static int detect_isas(void) {
     if (!__get_cpuid(0, &a, &b, &c, &d) || a < 7) return 0;
     unsigned max_leaf = a;
     __cpuid(1, a, b, c, d);
-    // FMA, OSXSAVE e AVX: o SO tem de ter ativado o estado AVX (xgetbv) alem de a CPU o ter
+    // FMA, OSXSAVE and AVX: the OS must have enabled the AVX state (xgetbv) in addition to the CPU having it
     if (!((c >> 12) & 1) || !((c >> 27) & 1) || !((c >> 28) & 1)) return 0;
     unsigned xlo, xhi;
     __asm__ volatile("xgetbv" : "=a"(xlo), "=d"(xhi) : "c"(0));
@@ -165,7 +165,7 @@ static int detect_isas(void) {
         if ((a1 >> 4) & 1) mask |= 1 << BI4J_ISA_AVXVNNI;
     }
 
-    // AVX-512 F (16), DQ (17), BW (30), VL (31) e VNNI (ecx 11); o SO tem de ter ativado opmask e zmm (xcr0 5..7)
+    // AVX-512 F (16), DQ (17), BW (30), VL (31) and VNNI (ecx 11); the OS must have enabled opmask and zmm (xcr0 5..7)
     const unsigned need = (1u << 16) | (1u << 17) | (1u << 30) | (1u << 31);
     if ((b & need) == need && ((c >> 11) & 1) && (xlo & 0xE0) == 0xE0) mask |= 1 << BI4J_ISA_AVX512;
     return mask;
@@ -201,7 +201,7 @@ static const struct bi4j_kernels *const tables[] = { NULL, &bi4j_kernels_neon, &
 #endif
 
 int bi4j_supported_isas(void) {
-    static atomic_int cached = 0; /* ATOMIC_VAR_INIT is deprecated in C17 and removed in C23 */ // zero significa ainda nao calculado
+    static atomic_int cached = 0; /* ATOMIC_VAR_INIT is deprecated in C17 and removed in C23 */ // zero means not yet computed
     int value = atomic_load_explicit(&cached, memory_order_relaxed);
     if (value == 0) {
         int detected = detect_isas() + 1;
@@ -224,8 +224,8 @@ int bi4j_selected_isa(int flags) {
 static const struct bi4j_kernels *kernels_for(int flags) {
     int level = bi4j_selected_isa(flags);
     if (level == 0) {
-        // O Java verifica isto antes de usar o nativo; chegar aqui e um erro de uso. Sem libc: no Windows a DLL e
-        // ligada sem bibliotecas, por isso nada de fprintf/abort.
+        // Java checks this before using native; reaching here is a usage error. No libc: on Windows the DLL is
+        // linked without libraries, so no fprintf/abort.
         __builtin_trap();
     }
     return tables[level];

@@ -218,7 +218,7 @@ public class NativeSimdTensorOperations implements TensorOperations {
                         );
                         break;
                     case I8:
-                        throw new UnsupportedOperationException("F32xQ8 nao e suportado pelo backend nativo; selecione -Dbi4j.backend=panama");
+                        throw new UnsupportedOperationException("F32xQ8 is not supported by the native backend; select -Dbi4j.backend=panama");
                     default:
                         throw new UnsupportedOperationException(at.dType().name() + " " + bt.dType().name());
                 }

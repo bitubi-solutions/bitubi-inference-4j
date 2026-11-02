@@ -1,4 +1,4 @@
-/* Kernels NEON (ARM64); Q8xQ4 usa dotprod quando compilado com essa extensao. */
+/* NEON kernels (ARM64); Q8xQ4 uses dotprod when compiled with that extension. */
 #include <arm_neon.h>
 #include "kernels.h"
 

@@ -126,7 +126,7 @@
                 <!-- We compile with highest jdk to lowest supported target, this is the best compatibility -->
                 <configuration>
 
-                  <!-- bytecode 21: o Spring Boot 3.3.x (ASM) nao le classes 25; subir para 25 junto com o upgrade do Spring (sub-projeto 2). O JDK 25 segue como unico JDK de build, teste e execucao. -->
+                  <!-- bytecode 21: Spring Boot 3.3.x (ASM) cannot read version-25 classes; raise to 25 together with the Spring upgrade (sub-project 2). JDK 25 remains the only JDK for build, test and runtime. -->
                   <source>21</source>
                   <target>21</target>
                   <compilerArgs>

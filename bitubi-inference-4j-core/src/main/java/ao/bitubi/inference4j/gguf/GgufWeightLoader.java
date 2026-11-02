@@ -57,11 +57,11 @@ public final class GgufWeightLoader implements WeightLoader {
     @Override public DType getModelDType() { return DType.F32; }
     @Override public AbstractTensor load(String name, DistributedContext dctx, boolean sparseRows, boolean sparseColumns) {
         if (dctx != null && (dctx.hasModelShard() || dctx.numberOfLayers != ((Number) file.getMetadata().get("qwen2.block_count")).intValue()))
-            throw new UnsupportedOperationException("GGUF nao suporta inferencia distribuida nesta fatia");
+            throw new UnsupportedOperationException("GGUF does not support distributed inference in this slice");
         GgufTensorInfo info = source.get(name);
-        if (info == null) throw new NoSuchElementException(name + " nao encontrado no GGUF");
+        if (info == null) throw new NoSuchElementException(name + " not found in the GGUF");
         try { return unpack(name, info, file.mapTensor(info), TensorShape.of(infos.get(name).shape)); }
-        catch (IOException e) { throw new IllegalStateException("Falha ao mapear tensor GGUF " + name, e); }
+        catch (IOException e) { throw new IllegalStateException("Failed to map GGUF tensor " + name, e); }
     }
 
     private static AbstractTensor unpack(String name, GgufTensorInfo info, ByteBuffer b, TensorShape shape) {

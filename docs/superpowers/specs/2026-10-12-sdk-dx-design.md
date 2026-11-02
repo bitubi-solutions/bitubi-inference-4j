@@ -1,92 +1,92 @@
-# SDK do bitubi-inference-4j: experiência do desenvolvedor (DX)
+# bitubi-inference-4j SDK: developer experience (DX)
 
-Data: 2026-10-12. Estado: **proposta, aguardando aprovação do autor** (nada implementado).
+Date: 2026-10-12. Status: **proposal, awaiting the author's approval** (nothing implemented).
 
-## 1. Objetivo
+## 1. Goal
 
-Quem integra o motor num app Java (Spring Boot, Quarkus, Micronaut ou `main` simples) deve chegar ao
-primeiro token com poucas linhas, sem conhecer tensores, `DType` nem flags da JVM, e com erros que
-dizem o que fazer. O projeto é novo; a retrocompatibilidade é mantida onde é barata (a API atual
-continua a funcionar), mas a API nova é a porta de entrada documentada.
+Whoever integrates the engine into a Java app (Spring Boot, Quarkus, Micronaut or a plain `main`) should reach the
+first token in a few lines, without knowing about tensors, `DType` or JVM flags, and with errors that
+say what to do. The project is new; backward compatibility is kept where it is cheap (the current API
+keeps working), but the new API is the documented entry point.
 
-## 2. O que existe hoje (lido no código)
+## 2. What exists today (read in the code)
 
-| Ponto | Situação | Efeito para quem integra |
+| Point | Situation | Effect for the integrator |
 |---|---|---|
-| Entrada | Três estáticos soltos: `SafeTensorSupport.maybeDownloadModel(dir, id)`, `ModelSupport.loadModel(File, DType, DType)` e `AbstractModel.generate(UUID, PromptContext, float, int, BiConsumer)` | O iniciante precisa descobrir a ordem e o significado de `DType.F32, DType.I8` |
-| Tipo central | `AbstractModel` expõe `forward`, `batchForward`, `makeTensor`, `sample`, `getLogits` | Superfície pública enorme e interna misturada com a de uso; difícil de manter estável |
-| Limite de tokens | O 4.º argumento de `generate` é o limite **total** (prompt incluído); valor baixo gera `IllegalArgumentException: Prompt exceeds max tokens` | Armadilha silenciosa (acontece com 16 num prompt normal) |
-| Streaming | Só callback `BiConsumer<String, Float>`; sem cancelamento | Não encaixa em `Flux`, SSE, `Flow` ou `Stream` |
-| Ciclo de vida | `Generator extends Closeable` (bom), mas sem aviso quando se esquece de fechar | Fuga de memória off-heap |
-| JVM | Exige `--add-modules jdk.incubator.vector` (e `--enable-native-access`) | Falha em runtime se o app não passar as flags; mensagem pouco guiada |
-| Configuração | Propriedades `-D` estáticas (`bi4j.*`), lidas na carga da classe | Não se configura por código nem por `application.yml` |
-| Erros | `IOException` e `IllegalArgumentException` genéricos | Sem tipos para "modelo não encontrado", "formato não suportado", "sem memória" |
-| Empacotamento | Um artefato `-core` (Panama por padrão; o nativo é opcional); sem BOM | Aceitável; falta BOM e módulos de integração |
-| Integrações | A integração LangChain4j existente aponta para os artefatos antigos do Jlama | Quebra com o rename; precisa de adaptador próprio |
+| Entry | Three loose statics: `SafeTensorSupport.maybeDownloadModel(dir, id)`, `ModelSupport.loadModel(File, DType, DType)` and `AbstractModel.generate(UUID, PromptContext, float, int, BiConsumer)` | The beginner has to discover the order and the meaning of `DType.F32, DType.I8` |
+| Central type | `AbstractModel` exposes `forward`, `batchForward`, `makeTensor`, `sample`, `getLogits` | Huge public surface, with the internal one mixed into the usage one; hard to keep stable |
+| Token limit | The 4th argument of `generate` is the **total** limit (prompt included); a low value produces `IllegalArgumentException: Prompt exceeds max tokens` | Silent trap (happens with 16 on a normal prompt) |
+| Streaming | Only a `BiConsumer<String, Float>` callback; no cancellation | Does not fit `Flux`, SSE, `Flow` or `Stream` |
+| Lifecycle | `Generator extends Closeable` (good), but no warning when you forget to close it | Off-heap memory leak |
+| JVM | Requires `--add-modules jdk.incubator.vector` (and `--enable-native-access`) | Fails at runtime if the app does not pass the flags; poorly guided message |
+| Configuration | Static `-D` properties (`bi4j.*`), read at class load | Cannot be configured from code or from `application.yml` |
+| Errors | Generic `IOException` and `IllegalArgumentException` | No types for "model not found", "unsupported format", "out of memory" |
+| Packaging | One `-core` artifact (Panama by default; native is optional); no BOM | Acceptable; missing a BOM and integration modules |
+| Integrations | The existing LangChain4j integration points to the old Jlama artifacts | Breaks with the rename; needs its own adapter |
 
-## 3. API proposta (camada fina por cima da atual)
+## 3. Proposed API (thin layer on top of the current one)
 
 ```java
 try (Bi4j bi4j = Bi4j.builder()
-        .model("tjake/Llama-3.2-1B-Instruct-JQ4")   // id do Hugging Face ou caminho local
+        .model("tjake/Llama-3.2-1B-Instruct-JQ4")   // Hugging Face id or local path
         .modelsDir(Path.of("models"))
-        .build()) {                                  // baixa e carrega; escolhe os DType certos
+        .build()) {                                  // downloads and loads; picks the right DTypes
 
     ChatResponse r = bi4j.chat()
-        .system("Você é um assistente curto.")
-        .user("Qual a melhor época para plantar abacate?")
-        .maxNewTokens(256)                           // tokens NOVOS, sem a armadilha do total
+        .system("You are a concise assistant.")
+        .user("When is the best time to plant avocado?")
+        .maxNewTokens(256)                           // NEW tokens, without the total-limit trap
         .temperature(0.2f)
         .generate();
     System.out.println(r.text());
 
-    bi4j.chat().user("Olá").stream()                 // Flow.Publisher<Token>, cancelável
+    bi4j.chat().user("Hello").stream()               // Flow.Publisher<Token>, cancellable
         .subscribe(token -> System.out.print(token.text()));
 
-    float[] vector = bi4j.embed("texto");            // modelos de embedding
+    float[] vector = bi4j.embed("text");             // embedding models
 }
 ```
 
-Princípios:
-- **Um ponto de entrada** (`Bi4j`), imutável e seguro entre threads depois de construído; `AutoCloseable`.
-- **Padrões inteligentes:** `DType` escolhido pelo modelo e pelo hardware (`MachineSpec`); o iniciante não vê tensores.
-- **Limite em tokens novos** (`maxNewTokens`); o limite total fica na API antiga.
-- **Streaming reativo:** `Flow.Publisher<Token>` (JDK, sem dependência) e um `Iterator`/`Stream` bloqueante.
-- **Erros tipados** (`ModelNotFoundException`, `UnsupportedModelException`, `EngineSetupException`) com a causa e a correção na mensagem.
-- **Falha cedo e guiada:** ao construir, se `jdk.incubator.vector` não estiver ativo, a mensagem diz exatamente a flag e onde pôr (Maven Surefire, Spring Boot plugin, `JAVA_TOOL_OPTIONS`).
-- A API antiga (`ModelSupport`, `AbstractModel.generate`) não muda de comportamento; a nova fica em cima dela.
+Principles:
+- **A single entry point** (`Bi4j`), immutable and thread-safe once built; `AutoCloseable`.
+- **Smart defaults:** `DType` chosen from the model and the hardware (`MachineSpec`); the beginner does not see tensors.
+- **Limit on new tokens** (`maxNewTokens`); the total limit stays in the old API.
+- **Reactive streaming:** `Flow.Publisher<Token>` (JDK, no dependency) and a blocking `Iterator`/`Stream`.
+- **Typed errors** (`ModelNotFoundException`, `UnsupportedModelException`, `EngineSetupException`) with the cause and the fix in the message.
+- **Fail early and guided:** at build time, if `jdk.incubator.vector` is not enabled, the message states exactly the flag and where to put it (Maven Surefire, Spring Boot plugin, `JAVA_TOOL_OPTIONS`).
+- The old API (`ModelSupport`, `AbstractModel.generate`) does not change behavior; the new one sits on top of it.
 
-## 4. Módulos novos
+## 4. New modules
 
-| Módulo | Conteúdo | Observação |
+| Module | Contents | Note |
 |---|---|---|
-| `bitubi-inference-4j-bom` | Gerencia as versões de todos os artefatos | Uma linha no `dependencyManagement` do cliente |
-| `bitubi-inference-4j-sdk` | `Bi4j`, builders, `Token`, `ChatResponse`, exceções | Depende só do `-core` |
-| `bitubi-inference-4j-spring-boot-starter` | Auto-configuração: `bi4j.model`, `bi4j.models-dir`, bean `Bi4j`, health indicator | Alvo Spring Boot 4 (alinhado ao sub-projeto 2) |
-| `bitubi-inference-4j-langchain4j` | Adaptador `ChatModel`/`EmbeddingModel` | Substitui a integração antiga do Jlama |
-| `examples/` | `main` simples, Spring Boot e streaming | Compilados na CI para não apodrecerem |
+| `bitubi-inference-4j-bom` | Manages the versions of all artifacts | One line in the client's `dependencyManagement` |
+| `bitubi-inference-4j-sdk` | `Bi4j`, builders, `Token`, `ChatResponse`, exceptions | Depends only on `-core` |
+| `bitubi-inference-4j-spring-boot-starter` | Auto-configuration: `bi4j.model`, `bi4j.models-dir`, `Bi4j` bean, health indicator | Targets Spring Boot 4 (aligned with sub-project 2) |
+| `bitubi-inference-4j-langchain4j` | `ChatModel`/`EmbeddingModel` adapter | Replaces the old Jlama integration |
+| `examples/` | Plain `main`, Spring Boot and streaming | Compiled in CI so they do not rot |
 
-Spring AI e Quarkus ficam para depois da validação do starter.
+Spring AI and Quarkus come after the starter is validated.
 
-## 5. Critérios de aceitação (mensuráveis)
+## 5. Acceptance criteria (measurable)
 
-- Do zero ao primeiro token em **≤ 10 linhas** de código de aplicação (sem contar imports).
-- Um app Spring Boot de exemplo responde a um prompt com **só** a dependência do starter e `bi4j.model=...`.
-- Esquecer `--add-modules jdk.incubator.vector` produz **uma** mensagem de erro com a correção, testada.
-- `maxNewTokens` nunca dispara `Prompt exceeds max tokens` por causa do tamanho do prompt (testado com prompt longo).
-- Javadoc completo nos tipos públicos do `-sdk`; os exemplos compilam na CI em Linux, Windows e macOS.
-- Nenhuma regressão: a suíte atual e o teste de fumaça (saída igual à referência) continuam verdes.
+- From zero to the first token in **≤ 10 lines** of application code (not counting imports).
+- A sample Spring Boot app answers a prompt with **only** the starter dependency and `bi4j.model=...`.
+- Forgetting `--add-modules jdk.incubator.vector` produces **one** error message with the fix, tested.
+- `maxNewTokens` never triggers `Prompt exceeds max tokens` because of the prompt size (tested with a long prompt).
+- Complete Javadoc on the public types of `-sdk`; the examples compile in CI on Linux, Windows and macOS.
+- No regression: the current suite and the smoke test (output equal to the reference) stay green.
 
-## 6. Fases
+## 6. Phases
 
-1. `-sdk` com `Bi4j`, chat síncrono, streaming, embeddings, erros tipados e a verificação da flag (sem Spring).
-2. BOM e exemplos compilados na CI.
-3. Starter Spring Boot (junto ao upgrade para Spring Boot 4 e ao bytecode 25).
-4. Adaptador LangChain4j.
+1. `-sdk` with `Bi4j`, synchronous chat, streaming, embeddings, typed errors and the flag check (no Spring).
+2. BOM and examples compiled in CI.
+3. Spring Boot starter (together with the upgrade to Spring Boot 4 and bytecode 25).
+4. LangChain4j adapter.
 
-## 7. Questões em aberto
+## 7. Open questions
 
-- A flag `--add-modules` não pode ser ativada por código em apps de classpath: o starter pode apenas validar e orientar. Confirmar se há mecanismo viável por manifesto ou plugin antes de prometer "zero flags".
-- Cancelamento do streaming: o motor atual não expõe interrupção a meio da geração; verificar o custo de a introduzir no `generate`.
-- Nome do pacote público: `ao.bitubi.inference4j` (atual) ou um pacote `...sdk` dedicado para a API nova.
-- Escolha de `DType` automática: precisa de critério por modelo e por RAM; definir com o `engine-perf`.
+- The `--add-modules` flag cannot be enabled from code in classpath apps: the starter can only validate and guide. Confirm whether there is a viable mechanism via manifest or plugin before promising "zero flags".
+- Streaming cancellation: the current engine does not expose interruption mid-generation; check the cost of introducing it in `generate`.
+- Public package name: `ao.bitubi.inference4j` (current) or a dedicated `...sdk` package for the new API.
+- Automatic `DType` choice: needs a per-model and per-RAM criterion; define it with `engine-perf`.

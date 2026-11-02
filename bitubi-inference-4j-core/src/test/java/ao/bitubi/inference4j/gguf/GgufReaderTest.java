@@ -68,21 +68,21 @@ public class GgufReaderTest {
 
         Path badMagic = temporary.newFile("bad-magic.gguf").toPath();
         Files.write(badMagic, new byte[] { 0, 0, 0, 0 });
-        assertIOException(badMagic, "Magic");
+        assertIOException(badMagic, "magic");
 
         Path badVersion = temporary.newFile("bad-version.gguf").toPath();
         ByteBuffer header = ByteBuffer.allocate(24).order(ByteOrder.LITTLE_ENDIAN);
         header.putInt(0x46554747).putInt(1).putLong(0).putLong(0);
         Files.write(badVersion, header.array());
-        assertIOException(badVersion, "Versao");
+        assertIOException(badVersion, "version");
 
         Path truncated = temporary.newFile("truncated.gguf").toPath();
         Files.write(truncated, new byte[] { 0x47, 0x47, 0x55, 0x46 });
-        assertIOException(truncated, "prematuro");
+        assertIOException(truncated, "Premature end");
     }
 
     private static void assertIOException(Path path, String messagePart) throws Exception {
-        try { new GgufFile(path); fail("Esperava IOException"); }
+        try { new GgufFile(path); fail("Expected IOException"); }
         catch (IOException e) { assertTrue(e.getMessage(), e.getMessage().contains(messagePart)); }
     }
 }

@@ -1,32 +1,32 @@
-# Backends de operações de tensor
+# Tensor operation backends
 
-Medições de 2026-10-12, JDK 25, Intel Core Ultra 7 255H (AVX2 e AVX-VNNI, sem AVX-512), WSL2.
+Measurements from 2026-10-12, JDK 25, Intel Core Ultra 7 255H (AVX2 and AVX-VNNI, no AVX-512), WSL2.
 
-## O que existe hoje
+## What exists today
 
-São **2 backends** de operações de tensor (o `naive`, escalar, foi descartado por decisão do autor em 2026-10-12). Não há backend de GPU (o WebGPU é um spike por avaliar, sub-projeto 1b).
+There are **2 tensor operation backends** (`naive`, the scalar one, was dropped by the author's decision on 2026-10-12). There is no GPU backend (WebGPU is a spike still to be evaluated, sub-project 1b).
 
-| Backend | Valor de `bi4j.backend` | O que é | Estado |
+| Backend | `bi4j.backend` value | What it is | Status |
 |---|---|---|---|
-| Panama | `panama` | Java puro com a Vector API (`jdk.incubator.vector`). Caminhos para AVX-512, AVX2 (256 bits) e ARM de 128 bits | **Funciona e é o padrão** |
-| Native | `native` | C com SIMD, chamado por FFM (módulo `bitubi-inference-4j-native`) | **Funciona depois da correção desta branch**; continua opt-in (ver "Antes de o tornar padrão") |
+| Panama | `panama` | Pure Java with the Vector API (`jdk.incubator.vector`). Paths for AVX-512, AVX2 (256-bit) and 128-bit ARM | **Works and is the default** |
+| Native | `native` | C with SIMD, called through FFM (module `bitubi-inference-4j-native`) | **Works after the fix in this branch**; remains opt-in (see "Before making native the default") |
 
-## Como escolher
+## How to choose
 
 ```bash
-java -Dbi4j.backend=panama ...      # auto (padrão) | panama | native
+java -Dbi4j.backend=panama ...      # auto (default) | panama | native
 ```
 
-- `auto` (padrão): Panama, que exige a Vector API (`--add-modules=jdk.incubator.vector`); sem ela falha com uma mensagem que diz o que fazer. **Nunca escolhe o nativo sozinho.**
-- O prefixo `jlama.` e a flag `use_native_tensor_operations` foram removidos (sem retrocompatibilidade): só `bi4j.backend` escolhe o backend. Se alguma delas estiver definida, o motor regista um WARN único com o nome novo e **não** aplica o valor.
-- Uma escolha explícita que não pode ser atendida falha com mensagem que diz o que fazer: `auto` e `panama` sem a Vector API ativa pedem `--add-modules=jdk.incubator.vector`; `native` sem o módulo no classpath pede o artefato; um nome desconhecido lista os válidos.
-- O backend em uso aparece no log (`Using Panama Vector Operations (OffHeap)`) e na linha `PERF` do teste de desempenho.
+- `auto` (default): Panama, which requires the Vector API (`--add-modules=jdk.incubator.vector`); without it, it fails with a message that says what to do. **It never picks native on its own.**
+- The `jlama.` prefix and the `use_native_tensor_operations` flag were removed (no backward compatibility): only `bi4j.backend` selects the backend. If either one is set, the engine logs a single WARN with the new name and does **not** apply the value.
+- An explicit choice that cannot be satisfied fails with a message that says what to do: `auto` and `panama` without the Vector API enabled ask for `--add-modules=jdk.incubator.vector`; `native` without the module on the classpath asks for the artifact; an unknown name lists the valid ones.
+- The backend in use shows up in the log (`Using Panama Vector Operations (OffHeap)`) and in the `PERF` line of the performance test.
 
-## Variantes do nativo
+## Native variants
 
-Em x86-64, a biblioteca contém uma unidade base x86-64 sem instruções AVX e unidades separadas AVX2+FMA, AVX-VNNI e AVX-512+VNNI. O runtime consulta CPUID e o estado AVX do sistema operativo (`XGETBV`) antes de escolher a variante. AVX2+FMA é o mínimo para executar o backend nativo. `auto` continua a escolher Panama quando a Vector API está disponível; pedir `native` numa CPU abaixo do piso regista um aviso no log e usa Panama.
+On x86-64 the library has an x86-64 base unit without AVX instructions, plus separate AVX2+FMA, AVX-VNNI and AVX-512+VNNI units. At run time it checks CPUID and the operating system's AVX state (`XGETBV`) before picking a variant. AVX2+FMA is the minimum to run the native backend. `auto` keeps picking Panama when the Vector API is available; asking for `native` on a CPU below the floor logs a warning and uses Panama.
 
-`bi4j.native.isa` limita a variante máxima escolhida, para executar uma variante mais baixa na mesma máquina:
+`bi4j.native.isa` caps the highest variant picked, so a lower variant can run on the same machine:
 
 ```bash
 java -Dbi4j.backend=native -Dbi4j.native.isa=avx2 ...
@@ -34,91 +34,89 @@ java -Dbi4j.backend=native -Dbi4j.native.isa=avxvnni ...
 java -Dbi4j.backend=native -Dbi4j.native.isa=auto ...
 ```
 
-Valores aceites: `auto`, `avx2`, `avxvnni`, `avx512`; em ARM64, `neon` e `neon-dotprod`. Um limite acima do suportado selecciona a variante mais alta disponível abaixo desse limite e deixa um aviso no log. A lista da CPU aparece no log ao criar o backend. Em ARM64, a unidade base é NEON; dotprod/i8mm ainda não têm variantes independentes.
+Accepted values: `auto`, `avx2`, `avxvnni`, `avx512`; on ARM64, `neon` and `neon-dotprod`. A cap above what the CPU supports selects the highest available variant below it and leaves a warning in the log. The list for the CPU appears in the log when the backend is created. On ARM64 the base unit is NEON; `neon-dotprod` is selected at run time (`sysctl` on macOS, `getauxval` on Linux).
 
-No Linux x86-64, `check-isa.sh` usa `objdump` para exigir todos os objectos, confirmar que a unidade base não contém VEX/EVEX, que AVX2 não contém AVX-VNNI/AVX-512, que AVX-VNNI não contém AVX-512 e que as unidades avançadas contêm as instruções esperadas. A variante AVX-512 é compilada e inspeccionada em CPUs sem AVX-512, mas não deve ser executada nelas.
+On Linux x86-64, `check-isa.sh` uses `objdump` to require all the objects, and to confirm that the base unit has no VEX/EVEX, that AVX2 has no AVX-VNNI/AVX-512, that AVX-VNNI has no AVX-512, and that the advanced units contain the expected instructions. The AVX-512 variant is compiled and inspected on CPUs without AVX-512, but must not be executed on them.
 
-Na CI, confirmar em Linux x86-64 o `check-isa.sh`, `TestNativeRemainderTiles`, `TestOperations` e `SmokeTest` com cada ISA executável. Confirmar também build, `TestOperations` e smoke nativo em Windows x86-64, macOS Intel e macOS ARM64; em ARM64 verificar que a NEON base compila sem dotprod e que os kernels produzem a saída de referência.
+## Why native gave wrong answers (root cause, verified)
 
-## Por que o nativo dava resposta errada (causa-raiz, verificada)
+**It was not JDK 25.** The GEMM tile driver, in C (`gemm`, in `vector_simd.c`) and its Java copy
+(`Gemmer.mnpack`, in `PanamaTensorOperations`), splits the output matrix into tiles of up to 5x5. The leftover
+cells (rows that do not fill a tile, columns that do not fill a tile) are handled by two recursive
+calls: the bottom strip and the right strip. **The corner where the two leftovers meet was never computed.**
+Those cells kept whatever value was already in memory.
 
-**Não era o JDK 25.** O driver de blocos do GEMM, em C (`gemm`, em `vector_simd.c`) e a cópia dele em Java
-(`Gemmer.mnpack`, em `PanamaTensorOperations`), dividem a matriz de saída em blocos de até 5x5. As células que
-sobram (linhas que não completam um bloco, colunas que não completam um bloco) são tratadas por duas chamadas
-recursivas: a faixa de baixo e a faixa da direita. **O canto onde as duas sobras se cruzam nunca era calculado.**
-Essas células ficavam com o valor que já estava na memória.
+- In decode (M = 1 row) there are no leftover rows, so the corner does not exist and everything was correct.
+- In prefill (M = prompt tokens, e.g. 37) there are leftover rows and columns, and the last rows of the result were never computed. The model received garbage in the prompt and answered with a refusal.
+- This affected all four native type combinations (`F32xF32`, `F32xQ4`, `F32xBF16`, `I8xQ4`).
+- **Panama, the default backend, had the same defect** in `F32xF32` (12 of 70 tested shapes failed, for example M=5, N=5). The other Panama types escaped because their kernels use 1-column or 1-row tiles.
 
-- No decode (M = 1 linha) não há sobra de linhas, então o canto não existe e tudo dava certo.
-- No prefill (M = tokens do prompt, ex.: 37) sobram linhas e colunas, e as últimas linhas do resultado ficavam sem calcular. O modelo recebia lixo no prompt e respondia com uma recusa.
-- Isto afetava as quatro combinações de tipos do nativo (`F32xF32`, `F32xQ4`, `F32xBF16`, `I8xQ4`).
-- **O Panama, o backend padrão, tinha o mesmo defeito** em `F32xF32` (12 de 70 formas testadas falhavam, por exemplo M=5, N=5). Os outros tipos do Panama escapavam porque os kernels deles usam blocos de 1 coluna ou 1 linha.
+Fix: a third recursive call for the corner, in both places. Test: `TestNativeRemainderTiles` compares both
+backends, across 4 type combinations and 70 shapes (M in 1..37, N in 1..112), against a plain-loop oracle; it failed before
+(native: 15 wrong shapes per type; Panama: 12 in `F32xF32`) and passes now.
 
-Correção: uma terceira chamada recursiva para o canto, nos dois lugares. Teste: `TestNativeRemainderTiles` compara os dois
-backends, em 4 combinações de tipos e 70 formas (M em 1..37, N em 1..112), contra um oráculo de laços simples; falhava antes
-(nativo: 15 formas erradas por tipo; Panama: 12 em `F32xF32`) e passa agora.
+How the defect was found: `ShadowNativeInvestigation` (opt-in with `SHADOW=1`) runs the model on Panama and repeats every operation on
+native over copies, reporting where they diverge. A first version gave false positives because each call compared the whole result
+while other threads were filling other parts; the current version uses private buffers with a sentinel value.
 
-Como o defeito foi achado: `ShadowNativeInvestigation` (opt-in com `SHADOW=1`) roda o modelo no Panama e repete cada operação no
-nativo sobre cópias, relatando onde divergem. Uma primeira versão deu falsos positivos porque cada chamada comparava o resultado
-inteiro enquanto outras threads preenchiam outros pedaços; a versão atual usa buffers privados com valor sentinela.
+## Measurement (after the fix)
 
-## Medição (depois da correção)
+Quantized Qwen2.5-0.5B-Instruct (`tjake/Qwen2.5-0.5B-Instruct-JQ4`, F32 and I8 working memory), fixed prompt, temperature 0,
+2 warm-up runs and 5 measured runs per round (`PERF_BASELINE=1`, `PerfBaselineTest`). Rounds **interleaved in the same session**,
+with the output checked against the reference (the smoke test passes on both).
 
-Qwen2.5-0.5B-Instruct quantizado (`tjake/Qwen2.5-0.5B-Instruct-JQ4`, memória de trabalho F32 e I8), prompt fixo, temperatura 0,
-2 execuções de aquecimento e 5 medidas por rodada (`PERF_BASELINE=1`, `PerfBaselineTest`). Rodadas **intercaladas na mesma sessão**,
-com a saída conferida contra a referência (o teste de fumaça passa nos dois).
-
-| Rodada | Backend | Prefill tok/s | Decode tok/s | Pico de RSS (MB) | Carga (ms) |
+| Round | Backend | Prefill tok/s | Decode tok/s | Peak RSS (MB) | Load (ms) |
 |---|---|---|---|---|---|
-| 1 | Panama | 47,5 | 17,4 | 1132 | 2254 |
-| 2 | Native | 109,3 | 20,1 | 786 | 4187 |
-| 3 | Panama | 39,4 | 15,9 | 1143 | 3613 |
-| 4 | Native | 102,1 | 17,8 | 856 | 4750 |
+| 1 | Panama | 47.5 | 17.4 | 1132 | 2254 |
+| 2 | Native | 109.3 | 20.1 | 786 | 4187 |
+| 3 | Panama | 39.4 | 15.9 | 1143 | 3613 |
+| 4 | Native | 102.1 | 17.8 | 856 | 4750 |
 
-| | Panama (média de 2) | Native (média de 2) | Razão |
+| | Panama (mean of 2) | Native (mean of 2) | Ratio |
 |---|---|---|---|
-| Prefill | 43,5 | 105,7 | **cerca de 2,4x** |
-| Decode | 16,7 | 19,0 | +14% (as faixas se sobrepõem: 15,9 a 17,4 contra 17,8 a 20,1) |
-| Pico de RSS | 1138 MB | 821 MB | **cerca de 28% menos** |
-| Carga do modelo | 2,9 s | 4,5 s | nativo mais lento a carregar |
+| Prefill | 43.5 | 105.7 | **about 2.4x** |
+| Decode | 16.7 | 19.0 | +14% (the ranges overlap: 15.9 to 17.4 versus 17.8 to 20.1) |
+| Peak RSS | 1138 MB | 821 MB | **about 28% less** |
+| Model load | 2.9 s | 4.5 s | native slower to load |
 
-Notas:
-- **Memória:** o número que conta é o pico de RSS (`VmHWM`, Linux). Os tensores ficam fora do heap Java, então `heap_used_mb` subestima muito. Em outros sistemas o RSS aparece como -1.
-- **Velocidade:** prefill = tokens do prompt por segundo; decode = tokens gerados por segundo.
-- **Ruído:** esta máquina varia muito entre sessões (uma hora antes o Panama media 24 e 8 tok/s). Compare só rodadas intercaladas na mesma sessão. Duas rodadas por backend dão a ordem de grandeza, não um intervalo de confiança.
+Notes:
+- **Memory:** the number that matters is peak RSS (`VmHWM`, Linux). Tensors live outside the Java heap, so `heap_used_mb` greatly underestimates. On other systems RSS shows as -1.
+- **Speed:** prefill = prompt tokens per second; decode = generated tokens per second.
+- **Noise:** this machine varies a lot between sessions (an hour earlier Panama measured 24 and 8 tok/s). Only compare rounds interleaved in the same session. Two rounds per backend give the order of magnitude, not a confidence interval.
 
-## Memória de modelos GGUF F16
+## Memory for GGUF F16 models
 
-O loader GGUF alarga F16 para F32 em `ByteBuffer.allocateDirect`. O ficheiro Qwen2.5-0.5B F16 usado nesta fatia tem 1 266 425 696 bytes; os pesos alargados ocupam cerca de 2,53 GB de memória directa (sem contar KV cache e temporários). Com o limite directo padrão observado nesta máquina (~1,94 GB), o carregamento falhou; o smoke passou com `JAVA_TOOL_OPTIONS=-XX:MaxDirectMemorySize=4g`.
+The GGUF loader widens F16 to F32 in `ByteBuffer.allocateDirect`. The Qwen2.5-0.5B F16 file used in this slice has 1,266,425,696 bytes; the widened weights take about 2.53 GB of direct memory (not counting the KV cache and temporaries). With the default direct limit observed on this machine (~1.94 GB) loading failed; the smoke test passed with `JAVA_TOOL_OPTIONS=-XX:MaxDirectMemorySize=4g`.
 
-Usar `Arena`/`MemorySegment` para alocar fora de `ByteBuffer` é tecnicamente possível, mas não é uma substituição pequena: hoje `FloatBufferTensor` cria o segmento a partir do `ByteBuffer`, e `AbstractModel.close()` fecha o KV cache, sem dono/vida útil partilhada para a memória dos pesos. Seria necessário introduzir propriedade e fecho da arena dos pesos e garantir que os tensores/views não sobrevivem ao modelo. Não foi implementado nem medido.
+Using `Arena`/`MemorySegment` to allocate outside `ByteBuffer` is technically possible, but it is not a small substitution: today `FloatBufferTensor` creates the segment from the `ByteBuffer`, and `AbstractModel.close()` closes the KV cache, with no shared owner or lifetime for the weights' memory. It would need ownership and closing of the weights' arena, and a guarantee that tensors and views do not outlive the model. It was neither implemented nor measured.
 
-## Qual é o mais eficiente
+## Which one is the most efficient
 
-Entre os que funcionam: o **nativo**, neste hardware e neste modelo, no prefill (cerca de 2,4x) e na memória (cerca de 28% menos de RSS); no decode a vantagem é pequena e está dentro do ruído. O Panama continua o padrão por não depender de uma biblioteca compilada por sistema operacional.
+Among the working ones: **native**, on this hardware and this model, in prefill (about 2.4x) and in memory (about 28% less RSS); in decode the advantage is small and within the noise. Panama remains the default because it does not depend on a library compiled per operating system.
 
-## Onde vai a memória (Native Memory Tracking e JFR)
+## Where the memory goes (Native Memory Tracking and JFR)
 
-- A diferença de pico de RSS entre Panama e nativo foi quase toda **heap Java comprometido** (585 MB contra 328 MB numa medição); JIT (Code 19,6 contra 20,0 MB), classes e threads são iguais. Os tensores ficam fora do heap e são iguais nos dois.
-- **O RSS varia muito entre execuções do mesmo backend** (o Panama deu de 793 a 1143 MB), porque depende da expansão do heap pelo G1. Para comparar memória é preciso fixar o heap ou medir a taxa de alocação.
-- Perfil de alocações do Panama: **84% a 87% eram `int[]` criados no laço quente do GEMM** (parâmetros variádicos de `getVector`, `get` e `set`). O ramo `perf/no-varargs-alloc` acrescenta sobrecargas de dois inteiros e esse valor cai para 5%. **O efeito em tok/s não está demonstrado:** os A/B feitos sofreram carga do hospedeiro (a carga do modelo foi de 4 s para 18 s) e não permitem concluir. A mudança tem testes verdes (28) e saída idêntica à referência, mas não deve ser integrada como "otimização" sem um A/B numa máquina calma.
+- The peak RSS difference between Panama and native was almost entirely **committed Java heap** (585 MB versus 328 MB in one measurement); JIT (Code 19.6 versus 20.0 MB), classes and threads are the same. Tensors live outside the heap and are the same on both.
+- **RSS varies a lot between runs of the same backend** (Panama ranged from 793 to 1143 MB), because it depends on G1 heap expansion. To compare memory you have to fix the heap size or measure the allocation rate.
+- Panama allocation profile: **84% to 87% were `int[]` created in the GEMM hot loop** (varargs parameters of `getVector`, `get` and `set`). The `perf/no-varargs-alloc` branch adds two-int overloads and that share drops to 5%. **The effect on tok/s is not demonstrated:** the A/B runs done suffered from host load (model load went from 4 s to 18 s) and do not allow a conclusion. The change has green tests (28) and output identical to the reference, but it should not be merged as an "optimization" without an A/B on a quiet machine.
 
-## Antes de tornar o nativo o padrão
+## Before making native the default
 
-1. **Portabilidade entre CPUs:** o módulo nativo passou a compilar a base x86-64 sem AVX e a escolher kernels AVX2+FMA, AVX-VNNI e AVX-512+VNNI por CPUID. O piso do backend nativo é AVX2+FMA; em CPUs abaixo dele o pedido de `native` cai em Panama, com um aviso no log. `check-isa.sh` verifica os objectos x86 no build Linux.
-2. **Apple Silicon e Windows:** o nativo foi medido só em Linux x86.
-3. **Cobertura de testes:** `TestOperations` só inclui o nativo quando ele é o backend ativo; agora há também `TestNativeRemainderTiles`, que o executa sempre.
-4. **Carga do modelo:** o nativo demorou mais a carregar (4,5 s contra 2,9 s); causa não investigada.
+1. **Portability between CPUs:** the native module now compiles an x86-64 base without AVX and picks AVX2+FMA, AVX-VNNI and AVX-512+VNNI kernels by CPUID. The native backend's floor is AVX2+FMA; on CPUs below it, a request for `native` falls back to Panama with a warning in the log. `check-isa.sh` checks the x86 objects in the Linux build.
+2. **Apple Silicon and Windows:** native was measured only on Linux x86.
+3. **Test coverage:** `TestOperations` only includes native when it is the active backend; there are now also `TestNativeRemainderTiles` and `TestNativeRemainderTilesExtended`, which always run it.
+4. **Model load:** native took longer to load (4.5 s versus 2.9 s); cause not investigated.
 
-## Defeitos que continuam abertos
+## Defects still open
 
-Nenhum defeito de correção conhecido nos dois backends. Abertos: o build do nativo não é portável entre CPUs (`-march=native`), e o laço quente do Panama ainda aloca (ver abaixo).
+No known correctness defect in either backend. Open: the native build is not portable across CPUs (`-march=native`), and the Panama hot loop still allocates (see above).
 
-## Reproduzir
+## Reproduce
 
 ```bash
 export JAVA_HOME=$HOME/.sdkman/candidates/java/25.0.3-amzn
 JDK_JAVA_OPTIONS="-Dbi4j.backend=native" PERF_BASELINE=1 ./mvnw -B -pl bitubi-inference-4j-tests -am package \
   -Dtest=PerfBaselineTest -Dsurefire.failIfNoSpecifiedTests=false
-# variáveis opcionais: PERF_WARMUP, PERF_RUNS, PERF_MAX_TOKENS (o total de tokens inclui o prompt)
-# diagnóstico operação a operação (nativo contra Panama): SHADOW=1 ... -Dtest=ShadowNativeInvestigation
+# optional variables: PERF_WARMUP, PERF_RUNS, PERF_MAX_TOKENS (the token total includes the prompt)
+# operation-by-operation diagnosis (native versus Panama): SHADOW=1 ... -Dtest=ShadowNativeInvestigation
 ```

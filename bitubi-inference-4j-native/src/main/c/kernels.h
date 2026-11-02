@@ -1,9 +1,9 @@
 /**
  * @file kernels.h
- * @brief Interface privada entre a unidade base (vector_simd.c) e as unidades por ISA (kernels_*.c).
+ * @brief Private interface between the base unit (vector_simd.c) and the per-ISA units (kernels_*.c).
  *
- * Cada unidade por ISA e compilada com as suas proprias flags e exporta uma tabela de funcoes. A unidade base
- * (driver de blocos, API publica e deteccao da CPU) e compilada sem nenhuma instrucao acima do x86-64 generico.
+ * Each per-ISA unit is compiled with its own flags and exports a function table. The base unit
+ * (tile driver, public API and CPU detection) is compiled with no instruction above generic x86-64.
  */
 #ifndef BI4J_KERNELS_H
 #define BI4J_KERNELS_H
@@ -58,10 +58,10 @@ struct gemm_params {
     int ldc;
 };
 
-/* Calcula um bloco RM x RN da saida (ver gemm() em vector_simd.c). */
+/* Computes an RM x RN tile of the output (see gemm() in vector_simd.c). */
 typedef void (*bi4j_tile_fn)(int m0, int m, int n0, int n, int RM, int RN, struct gemm_params params);
 
-/* Tabela de funcoes de uma ISA: um kernel por combinacao de tipos. */
+/* Function table of one ISA: one kernel per type combination. */
 struct bi4j_kernels {
     const char *name;
     bi4j_tile_fn q8_q4;

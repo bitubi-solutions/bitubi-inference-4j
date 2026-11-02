@@ -1,12 +1,12 @@
 /*
  * Copyright 2026 Bitubi Solutions
- * Licenciado sob Apache License 2.0.
+ * Licensed under the Apache License 2.0.
  */
 package ao.bitubi.inference4j.gguf;
 
 import java.util.Arrays;
 
-/** Descritor de tensor; as dimensoes mantem a ordem GGML e offset e absoluto no ficheiro. */
+/** Tensor descriptor; dimensions keep the GGML order and offset is absolute in the file. */
 public final class GgufTensorInfo {
     private final String name;
     private final GgufType type;
@@ -17,7 +17,7 @@ public final class GgufTensorInfo {
 
     public GgufTensorInfo(String name, GgufType type, long[] dims, long relativeOffset, long dataOffset) {
         if (name == null || type == null || dims == null || dims.length == 0 || dims.length > 4) {
-            throw new IllegalArgumentException("Descritor de tensor GGUF invalido");
+            throw new IllegalArgumentException("Invalid GGUF tensor descriptor");
         }
         this.name = name;
         this.type = type;
@@ -26,11 +26,11 @@ public final class GgufTensorInfo {
         this.offset = Math.addExact(dataOffset, relativeOffset);
         long elements = 1;
         for (long dim : dims) {
-            if (dim <= 0) throw new IllegalArgumentException("Dimensao GGUF invalida em " + name + ": " + dim);
+            if (dim <= 0) throw new IllegalArgumentException("Invalid GGUF dimension in " + name + ": " + dim);
             elements = Math.multiplyExact(elements, dim);
         }
         if (elements % type.getElementsPerBlock() != 0) {
-            throw new IllegalArgumentException("Numero de elementos nao e multiplo do bloco " + type + " em " + name);
+            throw new IllegalArgumentException("Element count is not a multiple of the block size of " + type + " in " + name);
         }
         this.byteSize = Math.multiplyExact(elements / type.getElementsPerBlock(), type.getBytesPerBlock());
     }
