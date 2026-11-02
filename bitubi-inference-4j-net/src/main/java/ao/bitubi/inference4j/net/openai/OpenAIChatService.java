@@ -12,6 +12,8 @@
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
  * License for the specific language governing permissions and limitations
  * under the License.
+ *
+ * Modifications Copyright 2026 Bitubi Solutions
  */
 package ao.bitubi.inference4j.net.openai;
 
@@ -83,6 +85,8 @@ public class OpenAIChatService {
         }
 
         UUID sessionId = id;
+        // Without the session header the request is stateless: free its KV cache when it ends
+        boolean stateless = headers.get(SESSION_HEADER) == null;
 
         PromptSupport.Builder builder = model.promptSupport().get().builder();
 
@@ -124,7 +128,7 @@ public class OpenAIChatService {
         if (request.getStream() != null && request.getStream()) {
             SseEmitter emitter = new SseEmitter(-1L);
             CompletableFuture.supplyAsync(
-                () -> model.    generate(sessionId, builder.build(), temperature, maxTokens, (t, f) -> CompletableFuture.supplyAsync(() -> {
+                () -> model.generate(sessionId, builder.build(), temperature, maxTokens, (t, f) -> CompletableFuture.supplyAsync(() -> {
                     try {
                         emitter.send(
                             new CreateChatCompletionStreamResponse().id(sessionId.toString())
@@ -143,6 +147,7 @@ public class OpenAIChatService {
             ).handle((r, ex) -> {
                 try {
                     activeSessions.remove(sessionId);
+                    if (stateless) model.releaseSession(sessionId);
                     emitter.send(
                         new CreateChatCompletionStreamResponse().id(sessionId.toString())
                             .choices(
@@ -176,6 +181,7 @@ public class OpenAIChatService {
                 r = model.generate(sessionId, builder.build(), temperature, maxTokens, (s, f) -> {});
             } finally {
                 activeSessions.remove(sessionId);
+                if (stateless) model.releaseSession(sessionId);
             }
 
             CreateChatCompletionResponse out = new CreateChatCompletionResponse().id(sessionId.toString())

@@ -12,6 +12,8 @@
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
  * License for the specific language governing permissions and limitations
  * under the License.
+ *
+ * Modifications Copyright 2026 Bitubi Solutions
  */
 package ao.bitubi.inference4j.model;
 
@@ -178,6 +180,23 @@ public abstract class AbstractModel implements Generator {
         this.poolingLayer = inferenceType.isPooling ? Optional.ofNullable(loadPoolingWeights()) : Optional.empty();
     }
 
+    /**
+     * Frees the KV cache of a session and deletes its page files. A session keeps its KV cache across calls until
+     * this is called or the model is closed; nothing is freed on a timer. Temporary sessions call it after each call.
+     *
+     * @return false if the session had no KV cache
+     * @throws SessionBusyException if the session is generating
+     */
+    @Override
+    public boolean releaseSession(UUID sessionId) {
+        if (!activeSessions.add(sessionId)) throw new SessionBusyException(sessionId);
+        try {
+            return kvBufferCache.release(sessionId);
+        } finally {
+            activeSessions.remove(sessionId);
+        }
+    }
+
     @Override
     public void close() {
         kvBufferCache.close();
@@ -292,7 +311,7 @@ public abstract class AbstractModel implements Generator {
     ) {
         AbstractTensor embedding = null;
 
-        //Batch prompt into groups of MAX_BATCH_SIZE
+        // Batch prompt into groups of MAX_BATCH_SIZE
         for (int i = 0; i < token_ids.length; i += MAX_BATCH_SIZE) {
             int[] batch = Arrays.copyOfRange(token_ids, i, Math.min(token_ids.length, i + MAX_BATCH_SIZE));
             embedding = embedInput.batchInputsToEmbeddings(batch, startPos + i);
@@ -537,7 +556,8 @@ public abstract class AbstractModel implements Generator {
 
         Preconditions.checkArgument(encoded.length < c.contextLength && encoded.length < ntokens, "Prompt exceeds max tokens");
 
-        try (KvBufferCache.KvBuffer kvmem = kvBufferCache.getKvBuffer(sessionId)) { // k and v for context window
+        { // k and v for context window; the session keeps them across calls until releaseSession
+            KvBufferCache.KvBuffer kvmem = kvBufferCache.getKvBuffer(sessionId);
             int startPos = kvmem.getCurrentContextPosition(); // Number of tokens in the buffer
 
             logger.debug("Starting at token {} for session {} with prompt {}", startPos, sessionId, promptContext.getPrompt());
@@ -716,7 +736,8 @@ public abstract class AbstractModel implements Generator {
             List<ToolCall> toolCalls = new ArrayList<>(jsonCalls.size());
             for (String jsonCall : jsonCalls) {
                 if (jsonCall.startsWith("[")) {
-                    List<ToolCall> toolCallList = JsonSupport.om.readValue(jsonCall, new TypeReference<>() {});
+                    List<ToolCall> toolCallList = JsonSupport.om.readValue(jsonCall, new TypeReference<>() {
+                    });
                     toolCalls.addAll(toolCallList);
                 } else {
                     ToolCall toolCall = JsonSupport.om.readValue(jsonCall, ToolCall.class);

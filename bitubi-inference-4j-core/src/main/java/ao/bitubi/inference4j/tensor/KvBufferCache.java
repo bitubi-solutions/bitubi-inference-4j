@@ -12,6 +12,8 @@
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
  * License for the specific language governing permissions and limitations
  * under the License.
+ *
+ * Modifications Copyright 2026 Bitubi Solutions
  */
 package ao.bitubi.inference4j.tensor;
 
@@ -28,11 +30,13 @@ import java.io.Closeable;
 import java.io.IOError;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.lang.foreign.Arena;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.ShortBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
@@ -55,8 +59,17 @@ public class KvBufferCache implements Closeable {
         this.model = model;
     }
 
+    /** The session's buffer, created on first use. It lives until {@link #release} or {@link #close}. */
     public KvBuffer getKvBuffer(UUID session) {
         return kvBufferCache.computeIfAbsent(session, s -> new KvBuffer(s, 1 << 23, false)); // 8MB per page
+    }
+
+    /** Frees the session's buffer and deletes its page files. Returns false if the session had no buffer. */
+    public boolean release(UUID session) {
+        KvBuffer b = kvBufferCache.remove(session);
+        if (b == null) return false;
+        b.close();
+        return true;
     }
 
     public KvBuffer getEphemeralKvBuffer() {
@@ -126,6 +139,8 @@ public class KvBufferCache implements Closeable {
 
         private final AtomicBoolean closed = new AtomicBoolean(false);
         private final RandomAccessFile raf;
+        private final Arena arena; // maps the page file; closing it unmaps, so the file can be deleted (Windows too)
+        private final Path file;
 
         KvBufferPage(KvPageContext pageCtx, String pageId, boolean ephemeral) {
             this.pageCtx = pageCtx;
@@ -133,16 +148,14 @@ public class KvBufferCache implements Closeable {
 
             if (model.getConfig().workingDirectory().isEmpty() || ephemeral) {
                 this.raf = null;
+                this.arena = null;
+                this.file = null;
                 this.tensor = TensorCache.instance.get(model.getWorkingDType(), pageCtx.pageShape);
             } else {
                 try {
-                    raf = new RandomAccessFile(
-                        Paths.get(
-                            model.getConfig().workingDirectory().get().toString(),
-                            pageCtx.session.toString() + "-" + pageId + ".page"
-                        ).toFile(),
-                        "rw"
-                    );
+                    file = model.getConfig().workingDirectory().get().toPath().resolve(pageCtx.session + "-" + pageId + ".page");
+                    raf = new RandomAccessFile(file.toFile(), "rw");
+                    arena = Arena.ofShared();
                     long bytes = pageCtx.pageShape.size() * model.getWorkingDType().size();
                     logger.debug("Allocating page {} with {} bytes {}", pageId, bytes, raf.length());
                     if (raf.length() != bytes) raf.setLength(bytes);
@@ -150,14 +163,16 @@ public class KvBufferCache implements Closeable {
                     AbstractTensor t;
                     if (model.getWorkingDType() == DType.F32) {
                         FloatBuffer fb = raf.getChannel()
-                            .map(FileChannel.MapMode.READ_WRITE, 0, bytes)
+                            .map(FileChannel.MapMode.READ_WRITE, 0, bytes, arena)
+                            .asByteBuffer()
                             .order(ByteOrder.LITTLE_ENDIAN)
                             .asFloatBuffer();
 
                         t = new FloatBufferTensor(fb, pageCtx.pageShape, true);
                     } else if (model.getWorkingDType() == DType.BF16) {
                         ShortBuffer sb = raf.getChannel()
-                            .map(FileChannel.MapMode.READ_WRITE, 0, bytes)
+                            .map(FileChannel.MapMode.READ_WRITE, 0, bytes, arena)
+                            .asByteBuffer()
                             .order(ByteOrder.LITTLE_ENDIAN)
                             .asShortBuffer();
 
@@ -186,10 +201,12 @@ public class KvBufferCache implements Closeable {
         @Override
         public void close() throws IOException {
             if (closed.compareAndSet(false, true)) {
-                if (raf != null) {
-                    raf.close();
-                }
                 tensor.close();
+                if (raf != null) {
+                    arena.close();
+                    raf.close();
+                    Files.deleteIfExists(file);
+                }
             }
         }
     }

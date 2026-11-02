@@ -12,6 +12,8 @@
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
  * License for the specific language governing permissions and limitations
  * under the License.
+ *
+ * Modifications Copyright 2026 Bitubi Solutions
  */
 package ao.bitubi.inference4j.cli.commands;
 
@@ -42,15 +44,18 @@ public class CompleteCommand extends ModelBaseCommand {
             downloadSection.authToken
         );
 
-        AbstractModel m = loadModel(
-            modelPath.toFile(),
-            workingDirectory,
-            advancedSection.workingMemoryType,
-            advancedSection.workingQuantizationType,
-            Optional.ofNullable(advancedSection.modelQuantization),
-            Optional.ofNullable(advancedSection.threadCount)
-        );
-
-        m.generate(UUID.randomUUID(), PromptContext.of(prompt), temperature, tokens, makeOutHandler());
+        // One-shot: closing the model deletes the KV page files of this temporary session
+        try (
+            AbstractModel m = loadModel(
+                modelPath.toFile(),
+                workingDirectory,
+                advancedSection.workingMemoryType,
+                advancedSection.workingQuantizationType,
+                Optional.ofNullable(advancedSection.modelQuantization),
+                Optional.ofNullable(advancedSection.threadCount)
+            )
+        ) {
+            m.generate(UUID.randomUUID(), PromptContext.of(prompt), temperature, tokens, makeOutHandler());
+        }
     }
 }

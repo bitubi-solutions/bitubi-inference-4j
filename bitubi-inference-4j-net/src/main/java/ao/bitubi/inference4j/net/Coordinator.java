@@ -12,6 +12,8 @@
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
  * License for the specific language governing permissions and limitations
  * under the License.
+ *
+ * Modifications Copyright 2026 Bitubi Solutions
  */
 package ao.bitubi.inference4j.net;
 
@@ -232,5 +234,11 @@ public class Coordinator implements Generator {
     @Override
     public void close() {
 
+    }
+
+    /** Forgets the session's position. shortcut: the workers keep their KV pages until they restart; add a release RPC when the cluster work (sub-project 3) starts. */
+    @Override
+    public boolean releaseSession(UUID sessionId) {
+        return sessionPositions.remove(sessionId) != null;
     }
 }

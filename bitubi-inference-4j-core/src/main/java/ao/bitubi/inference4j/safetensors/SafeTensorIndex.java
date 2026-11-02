@@ -12,6 +12,8 @@
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
  * License for the specific language governing permissions and limitations
  * under the License.
+ *
+ * Modifications Copyright 2026 Bitubi Solutions
  */
 package ao.bitubi.inference4j.safetensors;
 
@@ -84,7 +86,11 @@ public class SafeTensorIndex implements WeightLoader, AutoCloseable {
         for (Map.Entry<String, String> e : index.weightFileMap.entrySet()) {
             // Only load the file if it's not already loaded
             if (!index.fileMap.containsKey(e.getValue())) {
-                RandomAccessFile raf = new RandomAccessFile(Paths.get(modelRoot.toString(), e.getValue()).toFile(), "r");
+                Path root = modelRoot.toAbsolutePath().normalize();
+                Path shard = root.resolve(e.getValue()).normalize();
+                // The index is untrusted data: a shard path must not leave the model directory
+                if (!shard.startsWith(root)) throw new IOException("Shard outside the model directory: " + e.getValue());
+                RandomAccessFile raf = new RandomAccessFile(shard.toFile(), "r");
                 index.fileMap.put(e.getValue(), raf);
 
                 // Read the first 1MB of the file to get the TensorInfo

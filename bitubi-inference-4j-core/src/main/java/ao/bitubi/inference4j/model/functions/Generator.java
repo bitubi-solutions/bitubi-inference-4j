@@ -12,6 +12,8 @@
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
  * License for the specific language governing permissions and limitations
  * under the License.
+ *
+ * Modifications Copyright 2026 Bitubi Solutions
  */
 package ao.bitubi.inference4j.model.functions;
 
@@ -140,12 +142,7 @@ public interface Generator extends Closeable {
         BiConsumer<String, Float> onTokenWithTimings
     );
 
-    default Response generate(
-            UUID session,
-            PromptContext promptContext,
-            float temperature,
-            int ntokens
-    ) {
+    default Response generate(UUID session, PromptContext promptContext, float temperature, int ntokens) {
         return generate(session, promptContext, temperature, ntokens, (s, aFloat) -> {});
     }
 
@@ -246,4 +243,7 @@ public interface Generator extends Closeable {
             return generator.generate(session, promptContext, temperature, ntokens, onTokenWithTimings);
         }
     }
+
+    /** Frees what the session keeps between calls (its KV cache). Returns false if there was nothing to free. */
+    boolean releaseSession(UUID sessionId);
 }

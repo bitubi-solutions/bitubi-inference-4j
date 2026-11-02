@@ -144,6 +144,11 @@ Only the launcher scripts and the container image read them. The `JLAMA_*` names
 The value is still a UUID that identifies the chat session (an invalid UUID is answered with `400`). The old
 header is ignored: a request that only sends it gets a new random session, with no error.
 
+A request without the header is a temporary session: its KV cache is freed and its page files deleted when the
+request ends. With the header, the session keeps its KV cache across requests until the server stops; it is never
+freed on a timer. In Java, `Generator.releaseSession(UUID)` frees a session, and closing the model frees them all
+(Jlama never deleted these `.page` files, see tjake/Jlama#140).
+
 ## gRPC
 
 The protobuf package and service names changed, so **a Jlama worker cannot talk to a bitubi-inference-4j
