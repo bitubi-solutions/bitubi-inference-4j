@@ -1,4 +1,4 @@
-/* Kernels AVX-512 (F, BW, DQ, VL, VNNI). Incluido por kernels_avx512.c; nao compilar sozinho. */
+/* AVX-512 kernels (F, BW, DQ, VL, VNNI). Included by kernels_avx512.c; do not compile on its own. */
 #include <immintrin.h>
 
 static void __attribute__((noinline)) gemm_q8_q4_512(int m0, int m, int n0, int n, int RM, int RN, struct gemm_params params) {

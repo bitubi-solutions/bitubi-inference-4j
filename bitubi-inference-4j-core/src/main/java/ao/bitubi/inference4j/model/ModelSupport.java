@@ -166,7 +166,7 @@ public class ModelSupport {
                 threadCount.ifPresent(PhysicalCoreExecutor::overrideThreadCount);
                 GgufFile gguf = new GgufFile(model.toPath());
                 if (!"qwen2".equals(gguf.getMetadata().get("general.architecture")))
-                    throw new IllegalArgumentException("Arquitetura GGUF nao suportada: " + gguf.getMetadata().get("general.architecture"));
+                    throw new IllegalArgumentException("Unsupported GGUF architecture: " + gguf.getMetadata().get("general.architecture"));
                 Config c = GgufConfigFactory.create(gguf.getMetadata());
                 distributedContextLoader.ifPresent(loader -> c.setDistributedContext(loader.apply(c)));
                 c.setWorkingDirectory(workingDirectory);

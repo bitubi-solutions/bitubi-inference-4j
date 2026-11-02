@@ -1,106 +1,106 @@
-# Suporte a GGUF, fatia 1: Qwen2 com F16, Q8_0 e Q4_0
+# GGUF support, slice 1: Qwen2 with F16, Q8_0 and Q4_0
 
-Data: 2026-10-12. Estado: **revisto; decisões do autor da secção 7 aplicadas; falta aprovar o plano** (nada implementado). Faz parte do sub-projeto 1
-(motor e SDK); ver `2026-10-11-bitubi-inference-4j-foundation-design.md`.
+Date: 2026-10-12. Status: **reviewed; the author's decisions in section 7 applied; the plan still needs approval** (nothing implemented). Part of sub-project 1
+(engine and SDK); see `2026-10-11-bitubi-inference-4j-foundation-design.md`.
 
-## 1. Intenção
+## 1. Intent
 
-O motor só lê SafeTensors. O GGUF é o formato mais usado para modelos quantizados e dá acesso direto
-ao ecossistema (Hugging Face, llama.cpp). Decisões do autor (2026-10-12): **abordagem A** (adaptador
-sobre os modelos existentes) e **primeira fatia = Qwen2 com F16, Q8_0 e Q4_0**.
+The engine only reads SafeTensors. GGUF is the most widely used format for quantized models and gives direct access
+to the ecosystem (Hugging Face, llama.cpp). Author's decisions (2026-10-12): **approach A** (an adapter
+over the existing models) and **first slice = Qwen2 with F16, Q8_0 and Q4_0**.
 
-Critério de sucesso da fatia: carregar `Qwen/Qwen2.5-0.5B-Instruct-GGUF` (Apache-2.0) em F16, Q8_0 e
-Q4_0, e gerar texto correto em temperatura 0, comprovado pelos testes da secção 6.
+Success criterion of the slice: load `Qwen/Qwen2.5-0.5B-Instruct-GGUF` (Apache-2.0) in F16, Q8_0 and
+Q4_0, and generate correct text at temperature 0, proven by the tests in section 6.
 
-## 2. Fatos verificados (fontes primárias)
+## 2. Verified facts (primary sources)
 
-Especificação `ggml-org/ggml/docs/gguf.md` e structs de `ggml/src/ggml-common.h`:
+Specification `ggml-org/ggml/docs/gguf.md` and structs from `ggml/src/ggml-common.h`:
 
-- Cabeçalho: magic `GGUF` (bytes `47 47 55 46`), `uint32 version` (a spec descreve a versão 3), `uint64 tensor_count`, `uint64 metadata_kv_count`. Little-endian por padrão.
-- Ordem: cabeçalho, informações dos tensores, preenchimento, dados dos tensores. Alinhamento `general.alignment` (uint32, múltiplo de 8; padrão 32); preenchimento com `0x00`.
-- Metadados: chave `gguf_string_t` (`uint64 len` + bytes UTF-8), tipo `uint32` (UINT8=0, INT8=1, UINT16=2, INT16=3, UINT32=4, INT32=5, FLOAT32=6, BOOL=7, STRING=8, ARRAY=9, UINT64=10, INT64=11, FLOAT64=12). Array = tipo do elemento + `uint64` contagem + elementos (pode ser aninhado).
-- Informação de tensor: nome (string, até 64 bytes), `uint32 n_dimensions` (até 4), `uint64 dims[n]`, `uint32 type`, `uint64 offset` **relativo ao início dos dados**, múltiplo do alinhamento.
-- `ggml_type`: F32=0, F16=1, Q4_0=2, Q4_1=3, Q5_0=6, Q5_1=7, Q8_0=8, Q8_1=9, Q2_K=10, Q3_K=11, Q4_K=12, Q5_K=13, Q6_K=14, Q8_K=15, I8=24, I16=25, I32=26, I64=27, F64=28, BF16=30 (e famílias IQ/TQ/MXFP4).
-- Blocos (elementos / bytes): Q4_0 32 / 18 (`half d` + 16 bytes de nibbles); Q8_0 32 / 34 (`half d` + 32 `int8`). Para a fatia 2: Q4_K 256 / 144, Q5_K 256 / 176, Q6_K 256 / 210.
-- Tokenizer: `tokenizer.ggml.model` (`llama`, `replit`, `gpt2`, `rwkv`), `tokenizer.ggml.tokens`, `tokenizer.ggml.merges`, `tokenizer.ggml.token_type` (1 normal, 2 desconhecido, 3 controlo, 4 definido pelo utilizador, 5 não usado, 6 byte), IDs especiais (`bos`, `eos`, `padding`...), `tokenizer.chat_template`.
-- Arquitetura: `general.architecture` e chaves `<arch>.*` (ex.: `<arch>.context_length`, `embedding_length`, `block_count`, `feed_forward_length`, `attention.head_count`, `attention.layer_norm_rms_epsilon`).
+- Header: magic `GGUF` (bytes `47 47 55 46`), `uint32 version` (the spec describes version 3), `uint64 tensor_count`, `uint64 metadata_kv_count`. Little-endian by default.
+- Order: header, tensor information, padding, tensor data. Alignment `general.alignment` (uint32, multiple of 8; default 32); padding with `0x00`.
+- Metadata: key `gguf_string_t` (`uint64 len` + UTF-8 bytes), type `uint32` (UINT8=0, INT8=1, UINT16=2, INT16=3, UINT32=4, INT32=5, FLOAT32=6, BOOL=7, STRING=8, ARRAY=9, UINT64=10, INT64=11, FLOAT64=12). Array = element type + `uint64` count + elements (can be nested).
+- Tensor information: name (string, up to 64 bytes), `uint32 n_dimensions` (up to 4), `uint64 dims[n]`, `uint32 type`, `uint64 offset` **relative to the start of the data**, a multiple of the alignment.
+- `ggml_type`: F32=0, F16=1, Q4_0=2, Q4_1=3, Q5_0=6, Q5_1=7, Q8_0=8, Q8_1=9, Q2_K=10, Q3_K=11, Q4_K=12, Q5_K=13, Q6_K=14, Q8_K=15, I8=24, I16=25, I32=26, I64=27, F64=28, BF16=30 (and the IQ/TQ/MXFP4 families).
+- Blocks (elements / bytes): Q4_0 32 / 18 (`half d` + 16 bytes of nibbles); Q8_0 32 / 34 (`half d` + 32 `int8`). For slice 2: Q4_K 256 / 144, Q5_K 256 / 176, Q6_K 256 / 210.
+- Tokenizer: `tokenizer.ggml.model` (`llama`, `replit`, `gpt2`, `rwkv`), `tokenizer.ggml.tokens`, `tokenizer.ggml.merges`, `tokenizer.ggml.token_type` (1 normal, 2 unknown, 3 control, 4 user-defined, 5 unused, 6 byte), special IDs (`bos`, `eos`, `padding`...), `tokenizer.chat_template`.
+- Architecture: `general.architecture` and keys `<arch>.*` (e.g. `<arch>.context_length`, `embedding_length`, `block_count`, `feed_forward_length`, `attention.head_count`, `attention.layer_norm_rms_epsilon`).
 
-**A spec não diz** a ordem das dimensões nem os tamanhos de bloco (estes vêm do código de referência).
+**The spec does not state** the order of the dimensions or the block sizes (these come from the reference code).
 
-Do nosso código (lido): o `Q4ByteBufferTensor` usa blocos de 32 valores, um byte = valor *j* (nibble baixo) e valor *j+16* (nibble alto), escala `max / -8` e valor `(q - 8) * escala`, com as escalas num `FloatBufferTensor` à parte. É o mesmo esquema do Q4_0 do GGUF, que guarda a escala (16 bits) inline no bloco. O `Q8ByteBufferTensor` tem blocos de 32 e escalas à parte.
+From our code (read): `Q4ByteBufferTensor` uses blocks of 32 values, one byte = value *j* (low nibble) and value *j+16* (high nibble), scale `max / -8` and value `(q - 8) * scale`, with the scales in a separate `FloatBufferTensor`. It is the same scheme as GGUF's Q4_0, which stores the scale (16 bits) inline in the block. `Q8ByteBufferTensor` has blocks of 32 and separate scales.
 
-## 3. Âmbito
+## 3. Scope
 
-**Dentro:** leitor GGUF v3 little-endian de arquivo único; tipos F32, F16, BF16, Q8_0 e Q4_0; arquitetura `qwen2`; configuração, tokenizer e template de chat a partir dos metadados; carregamento por `ModelSupport.loadModel` ao receber um `.gguf`.
+**Inside:** little-endian GGUF v3 reader for a single file; types F32, F16, BF16, Q8_0 and Q4_0; `qwen2` architecture; configuration, tokenizer and chat template from the metadata; loading through `ModelSupport.loadModel` when given a `.gguf`.
 
-**Fora (fatias seguintes ou nunca):** K-quants (Q4_K, Q5_K, Q6_K), Q5_0/Q5_1, famílias IQ; arquiteturas Llama, Mistral, Gemma etc. (Llama exige tratar a permutação de Q/K do RoPE); GGUF em partes (`-00001-of-0000N`); big-endian; exportar para GGUF; inferência distribuída com GGUF (`DistributedContext` não nulo falha com mensagem clara).
+**Outside (later slices or never):** K-quants (Q4_K, Q5_K, Q6_K), Q5_0/Q5_1, IQ families; Llama, Mistral, Gemma etc. architectures (Llama requires handling the RoPE Q/K permutation); GGUF in parts (`-00001-of-0000N`); big-endian; exporting to GGUF; distributed inference with GGUF (a non-null `DistributedContext` fails with a clear message).
 
-## 4. Desenho
+## 4. Design
 
-Pacote novo `ao.bitubi.inference4j.gguf` no `bitubi-inference-4j-core`:
+New package `ao.bitubi.inference4j.gguf` in `bitubi-inference-4j-core`:
 
-| Unidade | Responsabilidade | Depende de |
+| Unit | Responsibility | Depends on |
 |---|---|---|
-| `GgufType` | enum do `ggml_type` (id, elementos por bloco, bytes por bloco) | nada |
-| `GgufFile` | abre o arquivo (mmap), valida magic e versão, lê metadados e informações dos tensores, calcula o início dos dados e o alinhamento | `GgufType` |
-| `GgufTensorInfo` | nome, dimensões, tipo, offset absoluto | `GgufType` |
-| `GgufWeightLoader` (implementa `WeightLoader`) | traduz o nome HF pedido pelo modelo para o nome GGUF, lê o tensor e devolve o `AbstractTensor` certo | `GgufFile`, `GgufTensorNames`, `GgufRepack` |
-| `GgufTensorNames` | tabela por arquitetura: nome HF para nome GGUF | nada |
-| `GgufRepack` | converte blocos GGUF para os tensores internos (F16 direto; Q8_0 e Q4_0 separando a escala `half` para `float`) | tensores existentes |
-| `GgufConfigFactory` | metadados `qwen2.*` para `Qwen2Config` | `GgufFile` |
-| `GgufTokenizerFactory` | `tokenizer.ggml.*` para um `TokenizerModel` e o template de chat | `GgufFile` |
+| `GgufType` | enum of `ggml_type` (id, elements per block, bytes per block) | nothing |
+| `GgufFile` | opens the file (mmap), validates magic and version, reads metadata and tensor information, computes the start of the data and the alignment | `GgufType` |
+| `GgufTensorInfo` | name, dimensions, type, absolute offset | `GgufType` |
+| `GgufWeightLoader` (implements `WeightLoader`) | translates the HF name requested by the model into the GGUF name, reads the tensor and returns the right `AbstractTensor` | `GgufFile`, `GgufTensorNames`, `GgufRepack` |
+| `GgufTensorNames` | per-architecture table: HF name to GGUF name | nothing |
+| `GgufRepack` | converts GGUF blocks to the internal tensors (F16 directly; Q8_0 and Q4_0 splitting the `half` scale into a `float`) | existing tensors |
+| `GgufConfigFactory` | `qwen2.*` metadata to `Qwen2Config` | `GgufFile` |
+| `GgufTokenizerFactory` | `tokenizer.ggml.*` to a `TokenizerModel` and the chat template | `GgufFile` |
 
-Mudanças em código existente (mínimas):
-- `BPETokenizer` e `LlamaTokenizer`: construtor a partir de um `TokenizerModel` pronto (hoje só aceitam um `Path` com `tokenizer.json`).
-- `ModelSupport.loadModel`: se o arquivo termina em `.gguf`, usa o caminho GGUF (sem exigir `config.json`), escolhendo o `ModelType` por `general.architecture`.
+Changes to existing code (minimal):
+- `BPETokenizer` and `LlamaTokenizer`: constructor from a ready `TokenizerModel` (today they only accept a `Path` with `tokenizer.json`).
+- `ModelSupport.loadModel`: if the file ends in `.gguf`, uses the GGUF path (without requiring `config.json`), choosing the `ModelType` by `general.architecture`.
 
-Tradução de nomes para `qwen2` (**a confirmar listando os tensores do arquivo real**): `model.embed_tokens.weight` = `token_embd.weight`; `model.norm.weight` = `output_norm.weight`; `lm_head.weight` = `output.weight` (se ausente, usar `token_embd.weight` apenas quando os embeddings são partilhados); por camada `N`: `self_attn.{q,k,v}_proj.{weight,bias}` = `blk.N.attn_{q,k,v}.{weight,bias}`, `self_attn.o_proj.weight` = `blk.N.attn_output.weight`, `mlp.gate_proj` / `up_proj` / `down_proj` = `blk.N.ffn_gate` / `ffn_up` / `ffn_down`, `input_layernorm` = `blk.N.attn_norm`, `post_attention_layernorm` = `blk.N.ffn_norm`.
+Name translation for `qwen2` (**to be confirmed by listing the tensors of the real file**): `model.embed_tokens.weight` = `token_embd.weight`; `model.norm.weight` = `output_norm.weight`; `lm_head.weight` = `output.weight` (if absent, use `token_embd.weight` only when the embeddings are shared); per layer `N`: `self_attn.{q,k,v}_proj.{weight,bias}` = `blk.N.attn_{q,k,v}.{weight,bias}`, `self_attn.o_proj.weight` = `blk.N.attn_output.weight`, `mlp.gate_proj` / `up_proj` / `down_proj` = `blk.N.ffn_gate` / `ffn_up` / `ffn_down`, `input_layernorm` = `blk.N.attn_norm`, `post_attention_layernorm` = `blk.N.ffn_norm`.
 
-Configuração `Qwen2Config` a partir dos metadados: `qwen2.context_length`, `embedding_length`, `feed_forward_length`, `attention.head_count`, `attention.head_count_kv`, `block_count`, `attention.layer_norm_rms_epsilon`, `rope.freq_base`; vocabulário = tamanho de `tokenizer.ggml.tokens`; `bos`/`eos` dos IDs especiais (se `bos` faltar, usar o do `Config` do Qwen2 e documentar); ativação SiLU (fixa para a arquitetura, não está nos metadados).
+`Qwen2Config` configuration from the metadata: `qwen2.context_length`, `embedding_length`, `feed_forward_length`, `attention.head_count`, `attention.head_count_kv`, `block_count`, `attention.layer_norm_rms_epsilon`, `rope.freq_base`; vocabulary = size of `tokenizer.ggml.tokens`; `bos`/`eos` from the special IDs (if `bos` is missing, use the one from the Qwen2 `Config` and document it); SiLU activation (fixed for the architecture, it is not in the metadata).
 
-## 5. Riscos conhecidos
+## 5. Known risks
 
-1. **Ordem das dimensões.** Confirmado no Q4_0 real: GGML guarda a dimensão interna primeiro. Por exemplo, `blk.0.ffn_down.weight` tem `[4864,896]` no GGUF e a forma interna é `[896,4864]`. O loader inverte as dimensões.
-2. **Tokenizer.** O Qwen2 usa BPE ao nível de byte com um pré-tokenizador por regex; os metadados trazem `tokenizer.ggml.pre`, não o regex. Tem de reproduzir exatamente o do `tokenizer.json`. Mitigação: teste de paridade (secção 6).
-3. **Tokens especiais.** Os de controlo (`token_type = 3`, ex.: `<|im_start|>`) têm de virar *added tokens* para o texto do template de chat ser segmentado igual.
-4. **Template de chat.** Vem em `tokenizer.chat_template` (Jinja); tem de entrar no `PromptSupport` como o do `tokenizer_config.json`.
-5. **Embeddings partilhados.** A inspeção do ficheiro Q4_0 real `Qwen/Qwen2.5-0.5B-Instruct-GGUF` encontrou `output.weight` Q8_0 e `token_embd.weight` Q4_0; manter o fallback para variantes com pesos partilhados.
-6. **Arquivos grandes.** `ByteBuffer` limita a 2 GB; mapear por tensor (os do 0.5B são pequenos, mas o desenho não pode assumir isso).
-7. **Falso positivo de correção.** Um modelo pequeno pode "responder bem" por acaso; por isso a verificação compara contra referências, não só olha o texto.
+1. **Dimension order.** Confirmed on the real Q4_0: GGML stores the inner dimension first. For example, `blk.0.ffn_down.weight` has `[4864,896]` in the GGUF and the internal shape is `[896,4864]`. The loader reverses the dimensions.
+2. **Tokenizer.** Qwen2 uses byte-level BPE with a regex pre-tokenizer; the metadata carries `tokenizer.ggml.pre`, not the regex. It must reproduce exactly the one from `tokenizer.json`. Mitigation: parity test (section 6).
+3. **Special tokens.** The control ones (`token_type = 3`, e.g. `<|im_start|>`) must become *added tokens* so that the chat template text is segmented the same way.
+4. **Chat template.** It comes in `tokenizer.chat_template` (Jinja); it must enter `PromptSupport` like the one from `tokenizer_config.json`.
+5. **Shared embeddings.** Inspecting the real Q4_0 file `Qwen/Qwen2.5-0.5B-Instruct-GGUF` found `output.weight` Q8_0 and `token_embd.weight` Q4_0; keep the fallback for variants with shared weights.
+6. **Large files.** `ByteBuffer` is limited to 2 GB; map per tensor (those of the 0.5B are small, but the design cannot assume that).
+7. **Correctness false positive.** A small model can "answer well" by chance; that is why the verification compares against references, not just looking at the text.
 
-## 6. Verificação (critérios de aceitação)
+## 6. Verification (acceptance criteria)
 
-1. **Leitor, sem rede:** um GGUF mínimo gerado pelo próprio teste (escritor de teste) cobre todos os tipos de metadados, arrays, strings, preenchimento de alinhamento e offsets de tensores; magic ou versão inválidos dão erro claro.
-2. **Paridade do tokenizer:** para um conjunto fixo de textos (ASCII, acentos, emoji, código, números, espaços e quebras de linha, marcadores do template de chat), os IDs do tokenizer GGUF são **idênticos** aos do tokenizer feito do `tokenizer.json` do mesmo modelo (`tjake/Qwen2.5-0.5B-Instruct-JQ4`). Diferença zero.
-3. **Paridade dos pesos:** para todos os tensores Q8_0 e Q4_0 dos ficheiros reais, um descodificador de teste independente, lendo os blocos GGML crus, produz floats exatamente iguais aos tensores do `GgufWeightLoader`. A comparação com GGUF F16 é apenas estatística informativa (erro médio/máximo em passos, fração até meio passo e saturação), não é critério de falha.
-4. **Ponta a ponta:** com `qwen2.5-0.5b-instruct-fp16.gguf`, o prompt "What is the capital of France?" em temperatura 0 produz uma resposta contendo "Paris" e coerente; o Q8_0 produz o mesmo texto ou diverge só depois de um prefixo longo (registrar); o Q4_0 é coerente (registrar divergências). As referências de saída entram como `smoke-golden-gguf-*.txt`.
-5. **Sem regressão:** o teste de fumaça atual e a suíte existente continuam verdes; CI verde nos 4 sistemas.
-6. **Desempenho:** registrar tokens/s do GGUF F16, Q8_0 e Q4_0 no hardware do baseline. Não há meta numérica antes de medir.
+1. **Reader, no network:** a minimal GGUF generated by the test itself (test writer) covers all metadata types, arrays, strings, alignment padding and tensor offsets; an invalid magic or version gives a clear error.
+2. **Tokenizer parity:** for a fixed set of texts (ASCII, accents, emoji, code, numbers, spaces and line breaks, chat template markers), the GGUF tokenizer IDs are **identical** to those of the tokenizer built from the `tokenizer.json` of the same model (`tjake/Qwen2.5-0.5B-Instruct-JQ4`). Zero difference.
+3. **Weight parity:** for all Q8_0 and Q4_0 tensors of the real files, an independent test decoder, reading the raw GGML blocks, produces floats exactly equal to the `GgufWeightLoader` tensors. The comparison with GGUF F16 is only informative statistics (mean/max error in steps, fraction within half a step, and saturation), not a failure criterion.
+4. **End to end:** with `qwen2.5-0.5b-instruct-fp16.gguf`, the prompt "What is the capital of France?" at temperature 0 produces an answer containing "Paris" and coherent; Q8_0 produces the same text or diverges only after a long prefix (record it); Q4_0 is coherent (record divergences). The output references enter as `smoke-golden-gguf-*.txt`.
+5. **No regression:** the current smoke test and the existing suite stay green; CI green on the 4 systems.
+6. **Performance:** record tokens/s of GGUF F16, Q8_0 and Q4_0 on the baseline hardware. There is no numeric target before measuring.
 
-Os arquivos GGUF de teste (F16 1,27 GB, Q8_0 676 MB, Q4_0 429 MB) são baixados sob demanda e ficam fora do Git; os testes que dependem deles são opt-in por variável de ambiente, como o `SmokeTest`.
+The test GGUF files (F16 1.27 GB, Q8_0 676 MB, Q4_0 429 MB) are downloaded on demand and kept out of Git; the tests that depend on them are opt-in through an environment variable, like `SmokeTest`.
 
-### Revisão do critério de paridade Q4_0/Q8_0 (2026-10-16)
+### Revision of the Q4_0/Q8_0 parity criterion (2026-10-16)
 
-O antigo limite universal de meio passo contra o GGUF F16 foi removido: não verifica o repack e não é válido para todos os quantizadores. O Q4_0 de referência do ggml escolhe `d = max / -8` com o máximo assinado, converte com `x / d + 8.5` e limita o resultado superior a 15; há saturação unilateral, cujo erro pode chegar a um passo. Ver [quantização Q4_0 de referência](https://github.com/ggml-org/llama.cpp/blob/master/ggml/src/ggml-quants.c#L2357-L2404). Uma divergência face a um GGUF F16 de referência também pode reflectir decisões de quantização distintas; a proveniência/imatrix dos ficheiros usados não foi confirmada.
+The old universal half-step limit against GGUF F16 was removed: it does not verify the repack and is not valid for all quantizers. The ggml reference Q4_0 picks `d = max / -8` with the signed maximum, converts with `x / d + 8.5` and clamps the upper result to 15; there is one-sided saturation, whose error can reach one step. See [reference Q4_0 quantization](https://github.com/ggml-org/llama.cpp/blob/master/ggml/src/ggml-quants.c#L2357-L2404). A divergence from a reference GGUF F16 may also reflect distinct quantization decisions; the provenance/imatrix of the files used was not confirmed.
 
-A prova do repack compara, em cada tensor quantizado, os floats carregados com um descodificador de teste independente dos bytes crus: Q4_0 lê half `d` e os 16 bytes de nibbles (índices `j` e `j+16`); Q8_0 lê half `d` e 32 int8. A igualdade é exata. No ficheiro Q4_0 testado, os 169 tensores Q4_0 (493 961 216 valores) e o tensor Q8_0 `output.weight` (136 134 656 valores) passaram após corrigir o endereçamento de blocos para índices grandes. A comparação informativa Q4_0/F16 teve média 0,24477 passos, máximo 1 passo, 99,4083% até meio passo; 10 179 596 valores foram identificados como saturados (máximo de 1 passo), enquanto os não saturados ficaram até meio passo. A comparação Q8_0/F16 no ficheiro Q8_0 teve média 0,24274 passos, máximo 0,67213 e 99,2894% até meio passo; não mostrou saturação Q4. A comparação Q8_0/F16 no ficheiro Q8_0 teve média 0,24274 passos, máximo 0,67213 e 99,2894% até meio passo; não mostrou saturação Q4.
+The repack proof compares, in each quantized tensor, the loaded floats with an independent test decoder of the raw bytes: Q4_0 reads half `d` and the 16 bytes of nibbles (indices `j` and `j+16`); Q8_0 reads half `d` and 32 int8. The equality is exact. In the Q4_0 file tested, the 169 Q4_0 tensors (493 961 216 values) and the Q8_0 tensor `output.weight` (136 134 656 values) passed after fixing the block addressing for large indices. The informative Q4_0/F16 comparison had mean 0.24477 steps, maximum 1 step, 99.4083% within half a step; 10 179 596 values were identified as saturated (maximum of 1 step), while the non-saturated ones stayed within half a step. The Q8_0/F16 comparison on the Q8_0 file had mean 0.24274 steps, maximum 0.67213 and 99.2894% within half a step; it showed no Q4 saturation. The Q8_0/F16 comparison on the Q8_0 file had mean 0.24274 steps, maximum 0.67213 and 99.2894% within half a step; it showed no Q4 saturation.
 
-## 7. Decisões do autor (2026-10-13) e achado de kernels
+## 7. Author's decisions (2026-10-13) and kernel finding
 
-Aceitas as recomendações:
-- **Memória das escalas:** Q4_0 e Q8_0 ficam maiores (escala `half` inline vira `float` separada: Q4_0 18 para 20 bytes por bloco, +11%; Q8_0 34 para 36). Aceite na fatia 1.
-- **mmap por tensor** (sem o limite de 2 GB).
-- **F16 copiado** para um tensor interno primeiro; só se passa a mmap sem cópia se o tempo de carga doer.
-- **SentencePiece fora:** só `gpt2` (BPE de byte).
-- Ordem do plano: leitor e escritor de teste, paridade dos pesos, tokenizer, ponta a ponta.
+The recommendations were accepted:
+- **Scale memory:** Q4_0 and Q8_0 get larger (the inline `half` scale becomes a separate `float`: Q4_0 18 to 20 bytes per block, +11%; Q8_0 34 to 36). Accepted in slice 1.
+- **mmap per tensor** (without the 2 GB limit).
+- **F16 copied** into an internal tensor first; we only switch to mmap without a copy if the load time hurts.
+- **SentencePiece out:** only `gpt2` (byte BPE).
+- Plan order: reader and test writer, weight parity, tokenizer, end to end.
 
-**Achado (verificado no código, `PanamaTensorOperations.batchDotProduct`):** os kernels de GEMM só aceitam, como pesos (`b`), `F32`, `BF16` e `Q4` (com ativação `F32`; `I8` só com `Q4`; `BF16` só com `BF16`). **Não há kernel para pesos F16 nem Q8**; o nativo tem as mesmas 4 combinações (`F32xF32`, `F32xQ4`, `F32xBF16`, `I8xQ4`). Consequências para a fatia:
-- **Q4_0:** funciona com os kernels existentes (Panama e nativo).
-- **Q8_0:** exige kernel novo `F32xQ8` (e `I8xQ8` se a memória de trabalho for I8) no Panama. No nativo, só se for portado; até lá o nativo falha com mensagem clara ou delega ao Panama (decidir no plano, depois de ler como o `NativeSimdTensorOperations` trata combinações sem kernel).
-- **F16:** exige kernel novo `F32xF16`, ou alargar para F32 no carregamento (simples, mas dobra a memória: o 0,5B passa de 1,27 GB para cerca de 2,5 GB). Recomendação: alargar para F32 na fatia 1 como caminho de referência, documentado, e deixar o kernel `F32xF16` para depois.
-- O critério de sucesso (secção 1) mantém F16, Q8_0 e Q4_0, mas o Q8_0 passa a incluir o kernel novo, com teste contra o oráculo escalar (`ScalarReferenceOperations`, como o `TestNativeRemainderTiles`), incluindo blocos de borda.
+**Finding (verified in the code, `PanamaTensorOperations.batchDotProduct`):** the GEMM kernels only accept, as weights (`b`), `F32`, `BF16` and `Q4` (with `F32` activation; `I8` only with `Q4`; `BF16` only with `BF16`). **There is no kernel for F16 or Q8 weights**; native has the same 4 combinations (`F32xF32`, `F32xQ4`, `F32xBF16`, `I8xQ4`). Consequences for the slice:
+- **Q4_0:** works with the existing kernels (Panama and native).
+- **Q8_0:** requires a new `F32xQ8` kernel (and `I8xQ8` if the working memory is I8) in Panama. In native, only if ported; until then native fails with a clear message or delegates to Panama (decide in the plan, after reading how `NativeSimdTensorOperations` handles combinations without a kernel).
+- **F16:** requires a new `F32xF16` kernel, or widening to F32 at load time (simple, but doubles the memory: the 0.5B goes from 1.27 GB to about 2.5 GB). Recommendation: widen to F32 in slice 1 as the reference path, documented, and leave the `F32xF16` kernel for later.
+- The success criterion (section 1) keeps F16, Q8_0 and Q4_0, but Q8_0 now includes the new kernel, with a test against the scalar oracle (`ScalarReferenceOperations`, like `TestNativeRemainderTiles`), including edge tiles.
 
-## 8. Questões em aberto
+## 8. Open questions
 
-- Como o nativo trata combinações de tipos sem kernel (falha ou delega)? Verificar no plano.
-- `I8xQ8`: a memória de trabalho I8 é opcional; basta `F32xQ8` na fatia 1? Preferência: sim.
+- How does native handle type combinations without a kernel (fail or delegate)? Check in the plan.
+- `I8xQ8`: the I8 working memory is optional; is `F32xQ8` enough in slice 1? Preference: yes.

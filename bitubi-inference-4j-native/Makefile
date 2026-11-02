@@ -25,7 +25,7 @@
 SRC_DIR = src/main/c
 LIB = $(LIB_DIR)/$(LIB_NAME).$(LIB_EXT)
 
-# vector_simd.c fica no piso da arquitetura; cada kernel tem as suas flags.
+# vector_simd.c stays at the architecture floor; each kernel has its own flags.
 ARCH := $(shell uname -m)
 ifneq ($(filter x86_64 amd64,$(ARCH)),)
 ISA_UNITS ?= avx2 avxvnni avx512
@@ -34,12 +34,12 @@ else ifneq ($(filter aarch64 arm64,$(ARCH)),)
 ISA_UNITS ?= neon neon_dotprod
 BASE_ISA_CFLAGS = -march=armv8-a
 else
-$(error arquitetura nao suportada: $(ARCH))
+$(error unsupported architecture: $(ARCH))
 endif
 
 SRCS = $(SRC_DIR)/vector_simd.c $(ISA_UNITS:%=$(SRC_DIR)/kernels_%.c)
 
-# flags por ISA (alvos especificos: nao vazam para a unidade base)
+# per-ISA flags (target-specific: they do not leak into the base unit)
 $(OBJ_DIR)/kernels_avx2.o:    ISA_CFLAGS = -mavx2 -mfma
 $(OBJ_DIR)/kernels_avxvnni.o: ISA_CFLAGS = -mavx2 -mfma -mavxvnni
 $(OBJ_DIR)/kernels_avx512.o:  ISA_CFLAGS = -mavx2 -mfma -mavx512f -mavx512bw -mavx512dq -mavx512vl -mavx512vnni

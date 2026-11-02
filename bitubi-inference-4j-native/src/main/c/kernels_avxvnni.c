@@ -1,8 +1,8 @@
-/* Unidade AVX2 + FMA + AVX-VNNI (codificacao VEX, sem AVX-512). Flags: -mavx2 -mfma -mavxvnni (ver Makefile). */
+/* AVX2 + FMA + AVX-VNNI unit (VEX encoding, no AVX-512). Flags: -mavx2 -mfma -mavxvnni (see Makefile). */
 #include "kernels.h"
 
 #if !defined(__AVX2__) || !defined(__FMA__) || !defined(__AVXVNNI__)
-#error "kernels_avxvnni.c exige -mavx2 -mfma -mavxvnni"
+#error "kernels_avxvnni.c requires -mavx2 -mfma -mavxvnni"
 #endif
 
 #include "kernels_x86_256.inc"

@@ -1,12 +1,12 @@
 /*
  * Copyright 2026 Bitubi Solutions
  *
- * Este ficheiro e parte do projeto bitubi-inference-4j.
- * Licenciado sob Apache License 2.0.
+ * This file is part of the bitubi-inference-4j project.
+ * Licensed under the Apache License 2.0.
  */
 package ao.bitubi.inference4j.gguf;
 
-/** Tipos GGML suportados pela primeira fatia GGUF. */
+/** GGML types supported by the first GGUF slice. */
 public enum GgufType {
     F32(0, 1, 4),
     F16(1, 1, 2),
@@ -30,6 +30,6 @@ public enum GgufType {
 
     public static GgufType fromId(int id) {
         for (GgufType type : values()) if (type.id == id) return type;
-        throw new IllegalArgumentException("Tipo GGUF nao suportado nesta fatia: " + id);
+        throw new IllegalArgumentException("Unsupported GGUF type in this slice: " + id);
     }
 }
