@@ -107,6 +107,7 @@ public class TestNativeRemainderTilesExtended {
             Assume.assumeNoException("native library not loadable here", t);
         }
         Assert.assertFalse("no native ISA supported", out.isEmpty());
+        System.out.println("NATIVE_ISAS " + NativeSimdTensorOperations.supportedIsas());
         // The Vector API runs every species on any CPU (in software when not accelerated)
         for (MachineSpec.Type type : new MachineSpec.Type[] { MachineSpec.Type.AVX_256, MachineSpec.Type.AVX_512, MachineSpec.Type.ARM_128 })
             out.put("panama-" + type, new PanamaTensorOperations(type));

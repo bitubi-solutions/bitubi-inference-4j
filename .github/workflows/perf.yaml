@@ -1,0 +1,99 @@
+name: Performance A/B
+
+# Manual only. Builds two commits on the same runner and alternates their runs of PerfBaselineTest, so both sides
+# see the same hardware and the same noise. Also reports which native ISAs the runner can execute.
+on:
+  workflow_dispatch:
+    inputs:
+      before_ref:
+        description: "Commit or branch measured as 'before'"
+        required: true
+        default: "4b9b060"
+      after_ref:
+        description: "Commit or branch measured as 'after'"
+        required: true
+        default: "d5504cf"
+      backend:
+        description: "bi4j.backend for both sides (panama or native)"
+        required: true
+        default: "panama"
+      rounds:
+        description: "Alternating rounds per side"
+        required: true
+        default: "5"
+
+jobs:
+  ab:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest, macos-15-intel ]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: 25
+          distribution: temurin
+          mvn-toolchain-vendor: Eclipse Adoptium
+          cache: maven
+      - name: Cache small models used by the tests
+        uses: actions/cache@v4
+        with:
+          path: |
+            bitubi-inference-4j-tests/models
+            bitubi-inference-4j-net/models
+          key: models-qwen2.5-0.5b-jq4-tinyllama-q4
+      - name: Native ISAs this runner can execute
+        run: |
+          ./mvnw -B -q package -DskipTests
+          ./mvnw -B package -pl bitubi-inference-4j-tests -am '-Dtest=TestNativeRemainderTiles*' \
+            -Dsurefire.failIfNoSpecifiedTests=false | tee isa.txt | grep -E "NATIVE_ISAS|Tests run:|BUILD" || true
+          { echo "### Native ISAs on ${{ matrix.os }}"; echo '```'; grep -oE "NATIVE_ISAS \[[^]]*\]" isa.txt | sort -u; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Build both sides
+        run: |
+          for side in before after; do
+            ref=${{ inputs.before_ref }}; [ $side = after ] && ref=${{ inputs.after_ref }}
+            git worktree add "../$side" "$ref"
+            cp -r bitubi-inference-4j-tests/models "../$side/bitubi-inference-4j-tests/" 2>/dev/null || true
+            (cd "../$side" && ./mvnw -B -q package -DskipTests)
+          done
+      - name: Alternate the runs
+        env:
+          BI4J_BACKEND: ${{ inputs.backend }}
+          ROUNDS: ${{ inputs.rounds }}
+        run: |
+          for r in $(seq 1 "$ROUNDS"); do
+            for side in before after; do
+              (cd "../$side" && JDK_JAVA_OPTIONS="-Dbi4j.backend=$BI4J_BACKEND" PERF_BASELINE=1 ./mvnw -B -o \
+                -pl bitubi-inference-4j-tests -am package -Dtest=PerfBaselineTest -Dsurefire.failIfNoSpecifiedTests=false) \
+                | grep -E "^PERF " | sed "s/^/$side round=$r /" | tee -a perf.txt
+            done
+          done
+      - name: Summary
+        if: always()
+        run: |
+          python3 - "${{ matrix.os }}" "${{ inputs.before_ref }}" "${{ inputs.after_ref }}" "${{ inputs.backend }}" >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          import re, statistics, sys
+          os_, before, after, backend = sys.argv[1:]
+          rows = {"before": [], "after": []}
+          for line in open("perf.txt", encoding="utf-8"):
+              side = line.split()[0]
+              m = dict(re.findall(r"(\w+)=([\d.\-]+)", line))
+              rows[side].append((float(m["prefill_tok_s"]), float(m["decode_tok_s"])))
+          print(f"### {os_}: {backend}, before={before}, after={after}")
+          print("| side | runs | prefill median | decode median | prefill range | decode range |")
+          print("|---|---|---|---|---|---|")
+          for side, v in rows.items():
+              if not v:
+                  print(f"| {side} | 0 | - | - | - | - |"); continue
+              p = [x[0] for x in v]; d = [x[1] for x in v]
+              print(f"| {side} | {len(v)} | {statistics.median(p):.2f} | {statistics.median(d):.2f} | "
+                    f"{min(p):.2f}-{max(p):.2f} | {min(d):.2f}-{max(d):.2f} |")
+          EOF
