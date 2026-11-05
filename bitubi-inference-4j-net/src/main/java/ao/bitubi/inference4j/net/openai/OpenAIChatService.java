@@ -17,8 +17,8 @@
  */
 package ao.bitubi.inference4j.net.openai;
 
-import ao.bitubi.inference4j.model.ContextLengthExceededException;
-import ao.bitubi.inference4j.model.SessionBusyException;
+import ao.bitubi.inference4j.sdk.ContextLengthExceededException;
+import ao.bitubi.inference4j.sdk.SessionBusyException;
 import ao.bitubi.inference4j.model.functions.Generator;
 import ao.bitubi.inference4j.net.openai.model.*;
 import ao.bitubi.inference4j.safetensors.prompt.PromptSupport;

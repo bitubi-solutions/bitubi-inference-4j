@@ -12,6 +12,7 @@
  */
 package ao.bitubi.inference4j.model;
 
+import ao.bitubi.inference4j.sdk.ContextLengthExceededException;
 import static org.junit.Assert.*;
 
 import ao.bitubi.inference4j.model.functions.Generator;

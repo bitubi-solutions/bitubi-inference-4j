@@ -17,6 +17,8 @@
  */
 package ao.bitubi.inference4j.model;
 
+import ao.bitubi.inference4j.sdk.SessionBusyException;
+import ao.bitubi.inference4j.sdk.ContextLengthExceededException;
 import ao.bitubi.inference4j.util.Bi4jProperties;
 import static ao.bitubi.inference4j.util.DebugSupport.debug;
 

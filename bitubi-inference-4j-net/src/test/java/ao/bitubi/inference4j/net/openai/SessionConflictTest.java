@@ -23,7 +23,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import ao.bitubi.inference4j.model.SessionBusyException;
+import ao.bitubi.inference4j.sdk.SessionBusyException;
 import ao.bitubi.inference4j.model.functions.Generator;
 import ao.bitubi.inference4j.safetensors.prompt.PromptSupport;
 import java.util.Optional;
@@ -71,7 +71,11 @@ public class SessionConflictTest {
         UUID session = UUID.randomUUID();
         when(model.generate(any(), any(), anyFloat(), anyInt(), any())).thenThrow(new SessionBusyException(session));
 
-        mvc.perform(post("/chat/completions").header(SESSION_HEADER, session.toString()).contentType(MediaType.APPLICATION_JSON).content(body(false)))
+        mvc.perform(
+            post("/chat/completions").header(SESSION_HEADER, session.toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body(false))
+        )
             .andExpect(status().isConflict())
             .andExpect(jsonPath("$.error.type").value("invalid_request_error"))
             .andExpect(jsonPath("$.error.code").value("session_busy"))
@@ -90,13 +94,18 @@ public class SessionConflictTest {
         });
 
         // First request streams and stays in flight.
-        mvc.perform(post("/chat/completions").header(SESSION_HEADER, session.toString()).contentType(MediaType.APPLICATION_JSON).content(body(true)))
-            .andExpect(request().asyncStarted());
+        mvc.perform(
+            post("/chat/completions").header(SESSION_HEADER, session.toString()).contentType(MediaType.APPLICATION_JSON).content(body(true))
+        ).andExpect(request().asyncStarted());
         assertTrue(inFlight.await(30, TimeUnit.SECONDS));
 
         // Same session, streaming or not: 409 straight away, no async stream.
         for (boolean stream : new boolean[] { true, false }) {
-            mvc.perform(post("/chat/completions").header(SESSION_HEADER, session.toString()).contentType(MediaType.APPLICATION_JSON).content(body(stream)))
+            mvc.perform(
+                post("/chat/completions").header(SESSION_HEADER, session.toString())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(body(stream))
+            )
                 .andExpect(request().asyncNotStarted())
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.error.code").value("session_busy"));
@@ -104,16 +113,22 @@ public class SessionConflictTest {
 
         // A different session is not affected.
         when(model.generate(any(), any(), anyFloat(), anyInt(), any())).thenReturn(response());
-        mvc.perform(post("/chat/completions").header(SESSION_HEADER, UUID.randomUUID().toString()).contentType(MediaType.APPLICATION_JSON).content(body(false)))
-            .andExpect(status().isOk());
+        mvc.perform(
+            post("/chat/completions").header(SESSION_HEADER, UUID.randomUUID().toString())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body(false))
+        ).andExpect(status().isOk());
 
         // Once the first request finishes the session is usable again.
         release.countDown();
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
         int last = 0;
         while (System.nanoTime() < deadline) {
-            last = mvc.perform(post("/chat/completions").header(SESSION_HEADER, session.toString()).contentType(MediaType.APPLICATION_JSON).content(body(false)))
-                .andReturn().getResponse().getStatus();
+            last = mvc.perform(
+                post("/chat/completions").header(SESSION_HEADER, session.toString())
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .content(body(false))
+            ).andReturn().getResponse().getStatus();
             if (last == 200) break;
             Thread.sleep(50);
         }

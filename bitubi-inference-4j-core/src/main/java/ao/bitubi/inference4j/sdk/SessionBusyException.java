@@ -10,7 +10,7 @@
  * on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for
  * the specific language governing permissions and limitations under the License.
  */
-package ao.bitubi.inference4j.model;
+package ao.bitubi.inference4j.sdk;
 
 import java.util.UUID;
 
@@ -18,7 +18,7 @@ import java.util.UUID;
  * Thrown when a generation is requested on a session that is already generating. Concurrent requests on the
  * same session are rejected instead of queued, because they would share (and corrupt) the session's KV cache.
  */
-public class SessionBusyException extends IllegalStateException {
+public final class SessionBusyException extends Bi4jException {
 
     private final UUID sessionId;
 

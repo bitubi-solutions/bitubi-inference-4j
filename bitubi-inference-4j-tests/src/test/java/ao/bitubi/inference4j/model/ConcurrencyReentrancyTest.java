@@ -12,6 +12,7 @@
  */
 package ao.bitubi.inference4j.model;
 
+import ao.bitubi.inference4j.sdk.SessionBusyException;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -44,12 +45,8 @@ public class ConcurrencyReentrancyTest {
 
     private static final Logger logger = LoggerFactory.getLogger(ConcurrencyReentrancyTest.class);
 
-    private static final String[] PROMPTS = new String[] {
-        "What is the capital of France?",
-        "What is 2 + 2?",
-        "Name three primary colors.",
-        "Say hello in Portuguese."
-    };
+    private static final String[] PROMPTS = new String[] { "What is the capital of France?", "What is 2 + 2?", "Name three primary colors.",
+        "Say hello in Portuguese." };
 
     private static final int MAX_TOKENS = 48;
     private static AbstractModel model;
@@ -64,7 +61,14 @@ public class ConcurrencyReentrancyTest {
             seqOutputs[i] = generate(UUID.randomUUID(), i);
             assertFalse("Sequential output was blank for prompt: " + PROMPTS[i], seqOutputs[i].isBlank());
             logger.info("Sequential output for prompt [{}]: {}", i, seqOutputs[i].trim());
-            logger.info("Code points for prompt [{}]: {}", i, seqOutputs[i].trim().codePoints().mapToObj(c -> String.format("U+%04X", c)).collect(java.util.stream.Collectors.joining(" ")));
+            logger.info(
+                "Code points for prompt [{}]: {}",
+                i,
+                seqOutputs[i].trim()
+                    .codePoints()
+                    .mapToObj(c -> String.format("U+%04X", c))
+                    .collect(java.util.stream.Collectors.joining(" "))
+            );
             // UTF-8 bytes shown as Latin-1 ('Ã' followed by a character in U+0080..U+00BF) mean a decoding bug
             assertFalse("Mojibake in response text: " + seqOutputs[i], seqOutputs[i].matches("(?s).*\\u00C3[\\u0080-\\u00BF].*"));
         }
@@ -106,8 +110,14 @@ public class ConcurrencyReentrancyTest {
                 for (int i = 0; i < PROMPTS.length; i++) {
                     String parOutput = futures.get(i).get(120, TimeUnit.SECONDS);
                     if (!seqOutputs[i].equals(parOutput)) {
-                        String msg = String.format("Iteration %d, prompt %d (\"%s\"): expected=[%s], actual=[%s]",
-                            iter, i, PROMPTS[i], seqOutputs[i].trim(), parOutput.trim());
+                        String msg = String.format(
+                            "Iteration %d, prompt %d (\"%s\"): expected=[%s], actual=[%s]",
+                            iter,
+                            i,
+                            PROMPTS[i],
+                            seqOutputs[i].trim(),
+                            parOutput.trim()
+                        );
                         logger.error("DIVERGENCE: {}", msg);
                         divergences.add(msg);
                     }
@@ -117,8 +127,10 @@ public class ConcurrencyReentrancyTest {
             executor.shutdownNow();
         }
 
-        assertTrue("Found " + divergences.size() + " divergence(s) between sequential and parallel executions:\n"
-            + String.join("\n", divergences), divergences.isEmpty());
+        assertTrue(
+            "Found " + divergences.size() + " divergence(s) between sequential and parallel executions:\n" + String.join("\n", divergences),
+            divergences.isEmpty()
+        );
     }
 
     /**
