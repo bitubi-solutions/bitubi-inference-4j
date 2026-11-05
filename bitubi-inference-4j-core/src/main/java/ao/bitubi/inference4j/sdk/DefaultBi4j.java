@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
@@ -36,6 +37,7 @@ final class DefaultBi4j implements Bi4j {
     private final AbstractModel model;
     private final ModelInspection inspection;
     private final Path workDir;
+    private final Engine engine;
     private final Capabilities capabilities;
     private final AtomicBoolean closed = new AtomicBoolean();
 
@@ -43,6 +45,7 @@ final class DefaultBi4j implements Bi4j {
         this.model = model;
         this.inspection = inspection;
         this.workDir = workDir;
+        this.engine = new Engine(model);
         boolean embeddings = inspection.type() == ModelSupport.ModelType.BERT;
         this.capabilities = new Capabilities(
             Set.of(Modality.TEXT),
@@ -182,6 +185,29 @@ final class DefaultBi4j implements Bi4j {
     public Capabilities capabilities() {
         ensureOpen();
         return capabilities;
+    }
+
+    @Override
+    public ChatRequestBuilder chat() {
+        ensureOpen();
+        return new ChatRequestBuilder(this);
+    }
+
+    @Override
+    public ChatResponse generate(ChatRequest request) {
+        ensureOpen();
+        PromptMapper.checkInputs(capabilities, request.messages());
+        UUID session = UUID.randomUUID();
+        try {
+            return engine.run(
+                session,
+                PromptMapper.toPrompt(model.promptSupport(), request.messages(), false),
+                request.settings(),
+                t -> {}
+            );
+        } finally {
+            model.releaseSession(session); // temporary session: nothing stays in the KV cache
+        }
     }
 
     @Override

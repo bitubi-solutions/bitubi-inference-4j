@@ -38,6 +38,18 @@ public interface Bi4j extends AutoCloseable {
         return builder().model(modelId).build();
     }
 
+    /** Starts a fluent chat request: {@code bi4j.chat().user("Hi").generate()}. */
+    ChatRequestBuilder chat();
+
+    /**
+     * Runs a request on a temporary session (nothing is kept afterwards) and waits for the answer. Safe to call from
+     * many threads at once.
+     *
+     * @throws UnsupportedInputException a message has an input the model does not read
+     * @throws ContextLengthExceededException the prompt does not fit the context window
+     */
+    ChatResponse generate(ChatRequest request);
+
     /** What this model can do. */
     Capabilities capabilities();
 
