@@ -15,6 +15,7 @@ package ao.bitubi.inference4j.sdk;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Stream;
 
 /**
  * Fluent way to put a {@link ChatRequest} together and run it. The builder is mutable and not thread-safe; every call
@@ -68,6 +69,11 @@ public final class ChatRequestBuilder {
     /** The request as an immutable value. */
     public ChatRequest request() {
         return new ChatRequest(messages, settings);
+    }
+
+    /** Runs the request on a temporary session and streams the answer; see {@link Bi4j#stream}. */
+    public Stream<Token> stream() {
+        return bi4j.stream(request());
     }
 
     /** Runs the request on a temporary session and waits for the whole answer. */

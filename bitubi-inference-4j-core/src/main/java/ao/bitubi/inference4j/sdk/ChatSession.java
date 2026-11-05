@@ -14,6 +14,7 @@ package ao.bitubi.inference4j.sdk;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 /**
  * A conversation with a model. The history stays in the model's KV cache, so each turn only processes the new
@@ -27,6 +28,12 @@ public interface ChatSession extends AutoCloseable {
 
     /** Sends a user message and waits for the whole answer. */
     ChatResponse send(String userText);
+
+    /**
+     * Sends a user message and streams the answer. The session is busy from the first read until the stream is closed
+     * or ends; closing it early stops the generation and the session can be used again. See {@link Bi4j#stream}.
+     */
+    Stream<Token> stream(String userText);
 
     /**
      * @param message a message with role USER

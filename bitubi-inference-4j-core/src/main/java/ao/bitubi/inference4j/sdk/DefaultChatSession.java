@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 final class DefaultChatSession implements ChatSession {
     private final DefaultBi4j owner;
@@ -39,33 +41,63 @@ final class DefaultChatSession implements ChatSession {
 
     @Override
     public ChatResponse send(Message message) {
-        if (message.role() != Message.Role.USER) throw new IllegalArgumentException("send needs a USER message, got " + message.role());
+        checkUserMessage(message);
+        acquire();
+        try {
+            return turn(message, t -> {});
+        } finally {
+            release();
+        }
+    }
+
+    @Override
+    public Stream<Token> stream(String userText) {
+        Message message = Message.user(userText);
+        checkUserMessage(message);
+        return TokenStream.open(owner, this::acquire, onToken -> turn(message, onToken), this::release);
+    }
+
+    private void checkUserMessage(Message message) {
+        if (message.role() != Message.Role.USER) throw new IllegalArgumentException("a turn needs a USER message, got " + message.role());
         owner.ensureOpen();
         if (closed.get()) throw new IllegalStateException("ChatSession is closed");
+        PromptMapper.checkInputs(owner.capabilities(), List.of(message));
+    }
+
+    /** Takes the session for one call; a second concurrent call is rejected, never queued. */
+    private void acquire() {
+        if (closed.get()) throw new IllegalStateException("ChatSession is closed");
         if (!busy.compareAndSet(false, true)) throw new SessionBusyException(id);
+        if (closed.get()) { // closed between the check and the take
+            release();
+            throw new IllegalStateException("ChatSession is closed");
+        }
+    }
+
+    private void release() {
         try {
-            if (closed.get()) throw new IllegalStateException("ChatSession is closed");
-            PromptMapper.checkInputs(owner.capabilities(), List.of(message));
-
-            boolean fresh = options.temporary() || !started; // a fresh prompt carries the system message and preamble
-            List<Message> turn = new ArrayList<>();
-            if (fresh && options.system() != null) turn.add(Message.system(options.system()));
-            turn.add(message);
-            PromptContext prompt = PromptMapper.toPrompt(owner.model().promptSupport(), turn, !fresh);
-
-            ChatResponse response = owner.engine().run(id, prompt, options.defaults(), t -> {});
-            if (!options.temporary()) {
-                started = true;
-                synchronized (history) {
-                    history.add(message);
-                    history.add(Message.assistant(response.text()));
-                }
-            }
-            return response;
-        } finally {
             if (options.temporary() || closed.get()) owner.model().releaseSession(id);
+        } finally {
             busy.set(false);
         }
+    }
+
+    private ChatResponse turn(Message message, Consumer<Token> onToken) {
+        boolean fresh = options.temporary() || !started; // a fresh prompt carries the system message and preamble
+        List<Message> turn = new ArrayList<>();
+        if (fresh && options.system() != null) turn.add(Message.system(options.system()));
+        turn.add(message);
+        PromptContext prompt = PromptMapper.toPrompt(owner.model().promptSupport(), turn, !fresh);
+
+        ChatResponse response = owner.engine().run(id, prompt, options.defaults(), onToken);
+        if (!options.temporary()) {
+            started = true;
+            synchronized (history) {
+                history.add(message);
+                history.add(Message.assistant(response.text()));
+            }
+        }
+        return response;
     }
 
     @Override

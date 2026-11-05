@@ -32,7 +32,7 @@ public class StopMatcherTest {
         assertFalse(m.stopped());
         assertEquals("", m.accept("\nWorld")); // completes the stop; nothing after it is emitted
         assertTrue(m.stopped());
-        assertTrue(Thread.currentThread().isInterrupted());
+        assertFalse("the Engine interrupts after emitting the text, the matcher must not", Thread.currentThread().isInterrupted());
         assertEquals("", m.accept("more"));
         assertEquals("", m.flush());
     }

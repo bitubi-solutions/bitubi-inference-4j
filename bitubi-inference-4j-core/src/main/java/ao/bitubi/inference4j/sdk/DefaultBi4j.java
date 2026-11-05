@@ -31,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
+import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +45,7 @@ final class DefaultBi4j implements Bi4j {
     private final Capabilities capabilities;
     private final AtomicBoolean closed = new AtomicBoolean();
     private final Set<DefaultChatSession> sessions = ConcurrentHashMap.newKeySet();
+    private final Set<TokenStream> streams = ConcurrentHashMap.newKeySet();
 
     private DefaultBi4j(AbstractModel model, ModelInspection inspection, Path workDir, int contextLength) {
         this.model = model;
@@ -185,6 +187,10 @@ final class DefaultBi4j implements Bi4j {
         sessions.remove(session);
     }
 
+    Set<TokenStream> streams() {
+        return streams;
+    }
+
     Path workDir() {
         return workDir;
     }
@@ -238,6 +244,24 @@ final class DefaultBi4j implements Bi4j {
     }
 
     @Override
+    public Stream<Token> stream(ChatRequest request) {
+        ensureOpen();
+        PromptMapper.checkInputs(capabilities, request.messages());
+        UUID session = UUID.randomUUID();
+        return TokenStream.open(
+            this,
+            () -> {},
+            onToken -> engine.run(
+                session,
+                PromptMapper.toPrompt(model.promptSupport(), request.messages(), false),
+                request.settings(),
+                onToken
+            ),
+            () -> model.releaseSession(session) // temporary session
+        );
+    }
+
+    @Override
     public float[] embed(String text) {
         ensureOpen();
         if (!capabilities.embeddings()) throw new UnsupportedOperationException("this model does not produce embeddings");
@@ -248,6 +272,8 @@ final class DefaultBi4j implements Bi4j {
     public void close() {
         if (!closed.compareAndSet(false, true)) return;
         try {
+            for (TokenStream s : List.copyOf(streams))
+                s.cancel(); // before the sessions: they hold them busy
             for (DefaultChatSession s : List.copyOf(sessions))
                 s.close();
             model.close();

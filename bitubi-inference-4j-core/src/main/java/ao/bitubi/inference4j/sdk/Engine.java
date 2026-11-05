@@ -58,6 +58,8 @@ final class Engine {
         Generator.Response r = model.generate(session, prompt, s.temperature(), maxNewTokens, (piece, ms) -> {
             if (pieces[0]++ == 0) first[0] = System.nanoTime();
             emit.accept(matcher.accept(piece));
+            // Interrupt only after the text before the stop was handed over: a blocked consumer would reject it
+            if (matcher.stopped()) Thread.currentThread().interrupt();
         });
 
         if (matcher.stopped()) {
@@ -93,8 +95,8 @@ final class Engine {
 
     /**
      * Finds stop sequences in text that arrives in pieces. Text that could still turn into a stop sequence is held
-     * back; when a stop sequence completes, the matcher interrupts the current thread so the engine stops at its next
-     * token. Not thread-safe: one matcher per generation.
+     * back; once a stop sequence completes, {@link #stopped()} is true and nothing more is emitted. Not thread-safe:
+     * one matcher per generation.
      */
     static final class StopMatcher {
         private final List<String> stops;
@@ -120,7 +122,6 @@ final class Engine {
             if (hit >= 0) {
                 stopped = true;
                 pending.setLength(0);
-                Thread.currentThread().interrupt();
                 return s.substring(0, hit);
             }
 

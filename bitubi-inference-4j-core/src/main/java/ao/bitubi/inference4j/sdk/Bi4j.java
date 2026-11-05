@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.stream.Stream;
 
 /**
  * A loaded model. Immutable and thread-safe once built: any number of threads may use it at the same time. It
@@ -50,6 +51,15 @@ public interface Bi4j extends AutoCloseable {
      * @throws ContextLengthExceededException the prompt does not fit the context window
      */
     ChatResponse generate(ChatRequest request);
+
+    /**
+     * Like {@link #generate} but hands the answer over token by token. The stream is lazy: generation starts when it is
+     * first read. Closing it, or ending it early with {@code limit} or {@code takeWhile} inside try-with-resources,
+     * stops the generation at the next token. Use it in try-with-resources: an open stream keeps its work running.
+     *
+     * @throws UnsupportedInputException a message has an input the model does not read (thrown here, not when read)
+     */
+    Stream<Token> stream(ChatRequest request);
 
     /** A conversation that keeps its history in the model's KV cache until it is closed. */
     ChatSession newSession();
