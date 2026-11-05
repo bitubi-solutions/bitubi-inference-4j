@@ -554,15 +554,14 @@ public abstract class AbstractModel implements Generator {
             encoded = Arrays.copyOfRange(encoded, 1, encoded.length);
         }
 
-        Preconditions.checkArgument(encoded.length < c.contextLength && encoded.length < ntokens, "Prompt exceeds max tokens");
+        // ntokens is the number of new tokens; the prompt is limited only by the context window
+        Preconditions.checkArgument(ntokens > 0, "ntokens must be positive: %s", ntokens);
 
         { // k and v for context window; the session keeps them across calls until releaseSession
             KvBufferCache.KvBuffer kvmem = kvBufferCache.getKvBuffer(sessionId);
             int startPos = kvmem.getCurrentContextPosition(); // Number of tokens in the buffer
 
             logger.debug("Starting at token {} for session {} with prompt {}", startPos, sessionId, promptContext.getPrompt());
-
-            if (ntokens > c.contextLength) ntokens = c.contextLength;
 
             FinishReason reason = FinishReason.MAX_TOKENS;
             int promptLength;
@@ -586,6 +585,12 @@ public abstract class AbstractModel implements Generator {
                     promptTokens = Arrays.stream(encoded).mapToInt(Ints::checkedCast).toArray();
                     promptLength = encoded.length;
                 }
+
+                if (startPos + promptTokens.length >= c.contextLength) {
+                    throw new ContextLengthExceededException(sessionId, startPos, promptTokens.length, c.contextLength);
+                }
+                // The first token comes from the prompt pass, the rest from the loop; stop at the context window
+                int lastPosition = (int) Math.min(c.contextLength, (long) startPos + promptTokens.length + ntokens - 1);
 
                 long start = System.currentTimeMillis();
                 long promptStart = start;
@@ -616,7 +621,11 @@ public abstract class AbstractModel implements Generator {
                 }
 
                 start = System.currentTimeMillis();
-                for (int i = startPos + promptTokens.length; i < ntokens; i++) {
+                for (int i = startPos + promptTokens.length; i < lastPosition; i++) {
+                    if (Thread.currentThread().isInterrupted()) { // cancelled between tokens
+                        reason = FinishReason.CANCELLED;
+                        break;
+                    }
                     AbstractTensor output = forward(next, i, kvmem);
                     tokensGenerated++;
 
@@ -724,40 +733,40 @@ public abstract class AbstractModel implements Generator {
             return response;
         }
 
-        try {
-            // If we found a tool call, we need to extract the tool call from the response
-            List<String> jsonCalls = JsonSupport.extractJsonFromString(response.responseText);
-            if (jsonCalls.isEmpty()) {
-                logger.warn("Tool call detected but no tool call found in response: {}", response.responseText);
-                return response;
-            }
+        List<ToolCall> toolCalls = parseToolCalls(response.responseText, tools);
+        return toolCalls.isEmpty() ? response : response.copyWithToolCalls(toolCalls);
+    }
 
-            logger.debug("Found tool calls: {}", jsonCalls);
-            List<ToolCall> toolCalls = new ArrayList<>(jsonCalls.size());
-            for (String jsonCall : jsonCalls) {
+    /**
+     * The tool calls in a response: JSON objects (or arrays of them) whose {@code name} is one of {@code tools}.
+     * A model that only mentions a tool in prose, or writes other JSON, yields no calls (tjake/Jlama#206).
+     */
+    static List<ToolCall> parseToolCalls(String responseText, List<Tool> tools) {
+        Set<String> names = tools.stream().map(t -> t.getFunction().getName()).collect(Collectors.toSet());
+        List<ToolCall> toolCalls = new ArrayList<>();
+        for (String jsonCall : JsonSupport.extractJsonFromString(responseText)) {
+            try {
                 if (jsonCall.startsWith("[")) {
-                    List<ToolCall> toolCallList = JsonSupport.om.readValue(jsonCall, new TypeReference<>() {
-                    });
-                    toolCalls.addAll(toolCallList);
+                    toolCalls.addAll(JsonSupport.om.readValue(jsonCall, new TypeReference<List<ToolCall>>() {
+                    }));
                 } else {
-                    ToolCall toolCall = JsonSupport.om.readValue(jsonCall, ToolCall.class);
-                    toolCalls.add(toolCall);
+                    toolCalls.add(JsonSupport.om.readValue(jsonCall, ToolCall.class));
                 }
+            } catch (JsonProcessingException e) {
+                logger.debug("Not a tool call: {}", jsonCall);
             }
-
-            // Remove duplicates
-            toolCalls = toolCalls.stream().sorted(Comparator.comparing(ToolCall::getName)).distinct().collect(Collectors.toList());
-
-            for (int i = 0; i < toolCalls.size(); i++) {
-                // Standard is to use 9 digit ids
-                toolCalls.get(i).setId(String.format("%09d", i));
-            }
-
-            return response.copyWithToolCalls(toolCalls);
-        } catch (JsonProcessingException e) {
-            logger.error("Failed to parse tool call from response: {}", response.responseText, e);
         }
 
-        return response;
+        toolCalls = toolCalls.stream()
+            .filter(t -> t != null && t.getName() != null && names.contains(t.getName()))
+            .sorted(Comparator.comparing(ToolCall::getName))
+            .distinct()
+            .collect(Collectors.toList());
+        if (toolCalls.isEmpty()) logger.warn("A tool was named but no tool call was found in: {}", responseText);
+
+        for (int i = 0; i < toolCalls.size(); i++) {
+            toolCalls.get(i).setId(String.format("%09d", i)); // standard is 9-digit ids
+        }
+        return toolCalls;
     }
 }

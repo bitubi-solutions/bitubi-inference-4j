@@ -186,7 +186,8 @@ public class Coordinator implements Generator {
             int lastPosition = startPos + promptLength;
             int tokensGenerated = 0;
             sessionPositions.put(session, lastPosition);
-            for (int i = promptLength; i < ntokens; i++) {
+            // ntokens counts new tokens; stop at the context window
+            for (int i = promptLength; i < promptLength + ntokens && startPos + i < model.getConfig().contextLength; i++) {
                 int next = model.sample(output, temperature, ThreadLocalRandom.current().nextFloat(), logits);
                 output.close();
 

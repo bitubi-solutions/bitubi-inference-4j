@@ -17,6 +17,7 @@
  */
 package ao.bitubi.inference4j.net.openai;
 
+import ao.bitubi.inference4j.model.ContextLengthExceededException;
 import ao.bitubi.inference4j.model.SessionBusyException;
 import ao.bitubi.inference4j.model.functions.Generator;
 import ao.bitubi.inference4j.net.openai.model.*;
@@ -148,6 +149,10 @@ public class OpenAIChatService {
                 try {
                     activeSessions.remove(sessionId);
                     if (stateless) model.releaseSession(sessionId);
+                    if (ex != null) {
+                        emitter.completeWithError(ex);
+                        return null;
+                    }
                     emitter.send(
                         new CreateChatCompletionStreamResponse().id(sessionId.toString())
                             .choices(
@@ -195,6 +200,16 @@ public class OpenAIChatService {
 
             return new ResponseEntity<>(out, HttpStatus.OK);
         }
+    }
+
+    @ExceptionHandler(ContextLengthExceededException.class)
+    ResponseEntity<Map<String, Object>> contextLengthExceeded(ContextLengthExceededException e) {
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("message", e.getMessage());
+        error.put("type", "invalid_request_error");
+        error.put("param", "messages");
+        error.put("code", "context_length_exceeded");
+        return new ResponseEntity<>(Map.of("error", error), HttpStatus.BAD_REQUEST);
     }
 
     @ExceptionHandler(SessionBusyException.class)

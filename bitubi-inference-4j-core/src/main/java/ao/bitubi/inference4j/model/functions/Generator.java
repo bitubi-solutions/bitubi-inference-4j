@@ -36,7 +36,9 @@ public interface Generator extends Closeable {
         MAX_TOKENS,
         STOP_TOKEN,
         TOOL_CALL,
-        ERROR
+        ERROR,
+        /** The generating thread was interrupted; the tokens so far are kept in the session. */
+        CANCELLED
     }
 
     class Response {
