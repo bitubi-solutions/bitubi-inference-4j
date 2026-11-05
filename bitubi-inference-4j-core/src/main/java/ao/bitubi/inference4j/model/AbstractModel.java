@@ -199,6 +199,11 @@ public abstract class AbstractModel implements Generator {
         }
     }
 
+    /** Tokens the session holds in its KV cache; 0 if it has none. */
+    public int sessionPosition(UUID sessionId) {
+        return kvBufferCache.position(sessionId);
+    }
+
     @Override
     public void close() {
         kvBufferCache.close();
@@ -600,6 +605,9 @@ public abstract class AbstractModel implements Generator {
                 AbstractTensor last = DebugSupport.isDebug()
                     ? batchForwardSlow(promptTokens, startPos, kvmem)
                     : batchForward(promptTokens, startPos, kvmem);
+
+                // The prompt now sits in the KV cache: the session continues after it (Jlama only counted generated tokens)
+                kvmem.setCurrentContextPosition(startPos + promptTokens.length);
 
                 promptBatchTime = System.currentTimeMillis() - start;
                 float batchMsPerToken = Math.round((((double) promptBatchTime) / (double) promptLength));

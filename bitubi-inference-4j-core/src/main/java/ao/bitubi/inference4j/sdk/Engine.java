@@ -23,9 +23,12 @@ import java.util.function.Consumer;
 /** The only place that calls {@link AbstractModel#generate}: maps settings, stop sequences, usage and events. */
 final class Engine {
     private final AbstractModel model;
+    private final int contextLength;
 
-    Engine(AbstractModel model) {
+    /** @param contextLength the most tokens a session may hold; may be below the model's own maximum */
+    Engine(AbstractModel model, int contextLength) {
         this.model = model;
+        this.contextLength = contextLength;
     }
 
     /**
@@ -33,6 +36,13 @@ final class Engine {
      * held back while it could still be the start of a stop sequence.
      */
     ChatResponse run(UUID session, PromptContext prompt, GenerationSettings s, Consumer<Token> onToken) {
+        int promptTokens = model.getTokenizer().encode(prompt.getPrompt()).length;
+        int heldTokens = model.sessionPosition(session);
+        if (heldTokens + promptTokens >= contextLength) {
+            throw new ContextLengthExceededException(session, heldTokens, promptTokens, contextLength);
+        }
+        int maxNewTokens = Math.min(s.maxNewTokens(), contextLength - heldTokens - promptTokens);
+
         StopMatcher matcher = new StopMatcher(s.stop());
         StringBuilder text = new StringBuilder();
         int[] emitted = { 0 };
@@ -45,7 +55,7 @@ final class Engine {
             onToken.accept(new Token(safe, emitted[0]++));
         };
 
-        Generator.Response r = model.generate(session, prompt, s.temperature(), s.maxNewTokens(), (piece, ms) -> {
+        Generator.Response r = model.generate(session, prompt, s.temperature(), maxNewTokens, (piece, ms) -> {
             if (pieces[0]++ == 0) first[0] = System.nanoTime();
             emit.accept(matcher.accept(piece));
         });

@@ -23,10 +23,13 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,12 +43,13 @@ final class DefaultBi4j implements Bi4j {
     private final Engine engine;
     private final Capabilities capabilities;
     private final AtomicBoolean closed = new AtomicBoolean();
+    private final Set<DefaultChatSession> sessions = ConcurrentHashMap.newKeySet();
 
     private DefaultBi4j(AbstractModel model, ModelInspection inspection, Path workDir, int contextLength) {
         this.model = model;
         this.inspection = inspection;
         this.workDir = workDir;
-        this.engine = new Engine(model);
+        this.engine = new Engine(model, contextLength);
         boolean embeddings = inspection.type() == ModelSupport.ModelType.BERT;
         this.capabilities = new Capabilities(
             Set.of(Modality.TEXT),
@@ -173,6 +177,14 @@ final class DefaultBi4j implements Bi4j {
         return model;
     }
 
+    Engine engine() {
+        return engine;
+    }
+
+    void untrack(DefaultChatSession session) {
+        sessions.remove(session);
+    }
+
     Path workDir() {
         return workDir;
     }
@@ -191,6 +203,21 @@ final class DefaultBi4j implements Bi4j {
     public ChatRequestBuilder chat() {
         ensureOpen();
         return new ChatRequestBuilder(this);
+    }
+
+    @Override
+    public ChatSession newSession() {
+        return newSession(o -> {});
+    }
+
+    @Override
+    public ChatSession newSession(Consumer<SessionOptions.Builder> options) {
+        ensureOpen();
+        SessionOptions.Builder b = new SessionOptions.Builder();
+        options.accept(b);
+        DefaultChatSession session = new DefaultChatSession(this, b.build());
+        sessions.add(session);
+        return session;
     }
 
     @Override
@@ -221,6 +248,8 @@ final class DefaultBi4j implements Bi4j {
     public void close() {
         if (!closed.compareAndSet(false, true)) return;
         try {
+            for (DefaultChatSession s : List.copyOf(sessions))
+                s.close();
             model.close();
         } finally {
             deleteQuietly(workDir);

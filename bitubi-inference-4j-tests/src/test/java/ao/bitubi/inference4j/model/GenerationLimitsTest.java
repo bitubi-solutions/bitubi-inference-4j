@@ -67,6 +67,18 @@ public class GenerationLimitsTest {
     }
 
     @Test
+    public void aSessionRemembersThePromptItAlreadyProcessed() {
+        // The second turn must start after the first prompt and answer, not over them in the KV cache
+        UUID session = UUID.randomUUID();
+        Generator.Response r = model.generate(session, PromptContext.of(LONG_PROMPT), 0f, 5, (t, f) -> {});
+        assertTrue(
+            "position " + model.sessionPosition(session) + " counts prompt " + r.promptTokens + " and generated " + r.generatedTokens,
+            model.sessionPosition(session) >= r.promptTokens + r.generatedTokens
+        );
+        model.releaseSession(session);
+    }
+
+    @Test
     public void anInterruptCancelsBetweenTokens() {
         AtomicInteger seen = new AtomicInteger();
         try {

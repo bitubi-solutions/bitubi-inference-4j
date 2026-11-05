@@ -15,6 +15,7 @@ package ao.bitubi.inference4j.sdk;
 import ao.bitubi.inference4j.safetensors.DType;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -49,6 +50,12 @@ public interface Bi4j extends AutoCloseable {
      * @throws ContextLengthExceededException the prompt does not fit the context window
      */
     ChatResponse generate(ChatRequest request);
+
+    /** A conversation that keeps its history in the model's KV cache until it is closed. */
+    ChatSession newSession();
+
+    /** Like {@link #newSession()} with a system message, generation defaults or a temporary session. */
+    ChatSession newSession(Consumer<SessionOptions.Builder> options);
 
     /** What this model can do. */
     Capabilities capabilities();

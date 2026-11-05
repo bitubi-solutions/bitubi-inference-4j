@@ -64,6 +64,12 @@ public class KvBufferCache implements Closeable {
         return kvBufferCache.computeIfAbsent(session, s -> new KvBuffer(s, 1 << 23, false)); // 8MB per page
     }
 
+    /** Tokens the session holds in its KV cache; 0 if it has none. */
+    public int position(UUID session) {
+        KvBuffer b = kvBufferCache.get(session);
+        return b == null ? 0 : b.getCurrentContextPosition();
+    }
+
     /** Frees the session's buffer and deletes its page files. Returns false if the session had no buffer. */
     public boolean release(UUID session) {
         KvBuffer b = kvBufferCache.remove(session);
