@@ -150,6 +150,33 @@ public class ChatSessionTest {
     }
 
     @Test
+    public void aCallCanOverrideTheMaxNewTokens() {
+        try (ChatSession chat = bi4j.newSession(s -> s.temperature(0f).maxNewTokens(200))) {
+            ChatResponse r = chat.send("Count to 50.", new GenerationSettings(3, 0f, List.of()));
+            assertTrue(r.usage().generatedTokens() <= 3);
+            assertEquals(FinishReason.LENGTH, r.finishReason());
+        }
+    }
+
+    @Test
+    public void aCallCanOverrideTheStopSequences() {
+        try (ChatSession chat = bi4j.newSession(s -> s.temperature(0f).maxNewTokens(64))) {
+            ChatResponse r = chat.send("Count from 1 to 20, one number per line.", new GenerationSettings(64, 0f, List.of("5")));
+            assertEquals(r.text(), FinishReason.STOP_SEQUENCE, r.finishReason());
+            assertFalse(r.text(), r.text().contains("5"));
+        }
+    }
+
+    @Test
+    public void theOverrideDoesNotChangeTheSessionDefaults() {
+        try (ChatSession chat = bi4j.newSession(s -> s.temperature(0f).maxNewTokens(6))) {
+            assertTrue(chat.send("Hello", new GenerationSettings(2, 0f, List.of())).usage().generatedTokens() <= 2);
+            int next = chat.send("Count to 50.").usage().generatedTokens();
+            assertTrue("the session default of 6 applies again: " + next, next > 2 && next <= 6);
+        }
+    }
+
+    @Test
     public void sessionIdsAreDistinct() {
         try (ChatSession a = bi4j.newSession(); ChatSession b = bi4j.newSession()) {
             assertNotEquals(a.id(), b.id());

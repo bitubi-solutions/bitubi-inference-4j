@@ -41,6 +41,9 @@ public interface ChatSession extends AutoCloseable {
      */
     Stream<Token> stream(String userText);
 
+    /** Like {@link #send(String)} with settings for this call only; the session's defaults are not changed. */
+    ChatResponse send(String userText, GenerationSettings settings);
+
     /**
      * @param message a message with role USER
      * @throws UnsupportedInputException the message has an input the model does not read
@@ -48,6 +51,9 @@ public interface ChatSession extends AutoCloseable {
      * @throws SessionBusyException another call on this session is running
      */
     ChatResponse send(Message message);
+
+    /** Like {@link #send(Message)} with settings for this call only; the session's defaults are not changed. */
+    ChatResponse send(Message message, GenerationSettings settings);
 
     /**
      * Feeds earlier messages into this fresh session without generating anything, so that the next {@link #send}

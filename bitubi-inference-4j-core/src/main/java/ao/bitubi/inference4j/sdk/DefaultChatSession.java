@@ -40,11 +40,21 @@ final class DefaultChatSession implements ChatSession {
     }
 
     @Override
+    public ChatResponse send(String userText, GenerationSettings settings) {
+        return send(Message.user(userText), settings);
+    }
+
+    @Override
     public ChatResponse send(Message message) {
+        return send(message, options.defaults());
+    }
+
+    @Override
+    public ChatResponse send(Message message, GenerationSettings settings) {
         checkUserMessage(message);
         acquire();
         try {
-            return turn(message, t -> {});
+            return turn(message, settings, t -> {});
         } finally {
             release();
         }
@@ -54,7 +64,7 @@ final class DefaultChatSession implements ChatSession {
     public Stream<Token> stream(String userText) {
         Message message = Message.user(userText);
         checkUserMessage(message);
-        return TokenStream.open(owner, this::acquire, onToken -> turn(message, onToken), this::release);
+        return TokenStream.open(owner, this::acquire, onToken -> turn(message, options.defaults(), onToken), this::release);
     }
 
     private void checkUserMessage(Message message) {
@@ -82,14 +92,14 @@ final class DefaultChatSession implements ChatSession {
         }
     }
 
-    private ChatResponse turn(Message message, Consumer<Token> onToken) {
+    private ChatResponse turn(Message message, GenerationSettings settings, Consumer<Token> onToken) {
         boolean fresh = options.temporary() || !started; // a fresh prompt carries the system message and preamble
         List<Message> turn = new ArrayList<>();
         if (fresh && options.system() != null) turn.add(Message.system(options.system()));
         turn.add(message);
         PromptContext prompt = PromptMapper.toPrompt(owner.model().promptSupport(), turn, !fresh);
 
-        ChatResponse response = owner.run(id, prompt, options.defaults(), onToken);
+        ChatResponse response = owner.run(id, prompt, settings, onToken);
         if (!options.temporary()) {
             started = true;
             synchronized (history) {
