@@ -31,6 +31,16 @@ final class Engine {
         this.contextLength = contextLength;
     }
 
+    /** Feeds a prompt into a session without generating; see {@link AbstractModel#prefill}. */
+    int prefill(UUID session, PromptContext prompt) {
+        int promptTokens = model.getTokenizer().encode(prompt.getPrompt()).length;
+        int heldTokens = model.sessionPosition(session);
+        if (heldTokens + promptTokens >= contextLength) {
+            throw new ContextLengthExceededException(session, heldTokens, promptTokens, contextLength);
+        }
+        return model.prefill(session, prompt);
+    }
+
     /**
      * Runs one generation on an engine session. Tokens go to {@code onToken} as they are produced, minus any text
      * held back while it could still be the start of a stop sequence.

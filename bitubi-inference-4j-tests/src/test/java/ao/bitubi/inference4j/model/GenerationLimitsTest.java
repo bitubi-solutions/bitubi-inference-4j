@@ -79,6 +79,20 @@ public class GenerationLimitsTest {
     }
 
     @Test
+    public void aContinuationDoesNotAddTheStartTokenAgain() {
+        // The start token marks the beginning of a sequence. In the middle it reads as a document break to some
+        // models (Qwen forgot everything before it), so only the first call of a session may add it.
+        UUID session = UUID.randomUUID();
+        model.generate(session, PromptContext.of("one two three"), 0f, 1, (t, f) -> {});
+        int afterFirst = model.sessionPosition(session);
+        String second = " four five six";
+        int secondTokens = model.getTokenizer().encode(second).length;
+        model.generate(session, PromptContext.of(second), 0f, 1, (t, f) -> {});
+        assertEquals("only the new tokens are added", afterFirst + secondTokens, model.sessionPosition(session));
+        model.releaseSession(session);
+    }
+
+    @Test
     public void anInterruptCancelsBetweenTokens() {
         AtomicInteger seen = new AtomicInteger();
         try {

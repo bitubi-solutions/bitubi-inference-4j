@@ -49,6 +49,24 @@ public interface ChatSession extends AutoCloseable {
      */
     ChatResponse send(Message message);
 
+    /**
+     * Feeds earlier messages into this fresh session without generating anything, so that the next {@link #send}
+     * continues that conversation (for example after a restart). They also become part of {@link #history()}.
+     *
+     * @param earlier USER and ASSISTANT messages, oldest first; the session's own system message comes from its options
+     * @return the tokens processed
+     * @throws IllegalStateException the session is temporary or already holds a conversation
+     * @throws IllegalArgumentException a message has the role SYSTEM
+     * @throws ContextLengthExceededException the messages do not fit; the session is left unchanged
+     */
+    int restore(List<Message> earlier);
+
+    /** Tokens this session holds in the model's KV cache: its history and answers; 0 for a temporary session. */
+    int contextTokens();
+
+    /** The room left for new tokens up to the context length of the {@link Bi4j}. */
+    int contextRemaining();
+
     /** The user and assistant messages so far, oldest first; empty for a temporary session. Immutable copy. */
     List<Message> history();
 

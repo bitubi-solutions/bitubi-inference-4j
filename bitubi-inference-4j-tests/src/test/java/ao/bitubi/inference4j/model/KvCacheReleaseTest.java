@@ -72,6 +72,41 @@ public class KvCacheReleaseTest {
         }
     }
 
+    @Test(timeout = 60000)
+    public void pagesCreatedWhileInterruptsKeepArrivingAreStillCreated() throws Exception {
+        File dir = SafeTensorSupport.maybeDownloadModel("./models", "tjake/Qwen2.5-0.5B-Instruct-JQ4");
+        Path work = temporary.newFolder("work3").toPath();
+        try (AbstractModel model = ModelSupport.loadModel(dir, work.toFile(), DType.F32, DType.I8, Optional.empty(), Optional.empty())) {
+            var kv = model.kvBufferCache.getKvBuffer(UUID.randomUUID());
+            Thread main = Thread.currentThread();
+            java.util.concurrent.atomic.AtomicBoolean done = new java.util.concurrent.atomic.AtomicBoolean();
+            Thread interrupter = new Thread(() -> {
+                while (!done.get()) {
+                    main.interrupt(); // a cancel can land at any moment, including while a page file is being mapped
+                    java.util.concurrent.locks.LockSupport.parkNanos(200_000); // an interrupt every 0.2 ms
+                }
+            });
+            interrupter.start();
+            try {
+                for (int position = 0; position < 32768; position += 512) {
+                    for (int layer : new int[] { 0, 23 })
+                        kv.getKeyTensorForPosition(layer, position);
+                }
+            } finally {
+                done.set(true);
+                for (boolean joined = false; !joined;) {
+                    try {
+                        interrupter.join(); // the interrupter may still be interrupting us: wait until it has stopped
+                        joined = true;
+                    } catch (InterruptedException ignored) {
+                        // try again
+                    }
+                }
+                Thread.interrupted();
+            }
+        }
+    }
+
     private static long pageFiles(Path dir, UUID session) throws Exception {
         try (Stream<Path> files = Files.list(dir)) {
             return files.filter(p -> p.getFileName().toString().startsWith(session + "-")).count();

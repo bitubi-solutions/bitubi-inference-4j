@@ -199,6 +199,44 @@ public abstract class AbstractModel implements Generator {
         }
     }
 
+    /**
+     * Feeds a prompt into the session's KV cache without generating anything: the session continues after it.
+     *
+     * @return the tokens processed
+     * @throws SessionBusyException if the session is generating
+     * @throws ContextLengthExceededException if the prompt does not fit after what the session already holds
+     */
+    public int prefill(UUID sessionId, PromptContext promptContext) {
+        if (!activeSessions.add(sessionId)) throw new SessionBusyException(sessionId);
+        try {
+            long[] encoded = tokenizer.encode(promptContext.getPrompt());
+            if (encoded.length > 0 && encoded[0] == c.bosToken) encoded = Arrays.copyOfRange(encoded, 1, encoded.length);
+
+            KvBufferCache.KvBuffer kvmem = kvBufferCache.getKvBuffer(sessionId);
+            int startPos = kvmem.getCurrentContextPosition();
+
+            int[] tokens;
+            if (addBosToken() && startPos == 0) {
+                tokens = new int[1 + encoded.length];
+                tokens[0] = c.bosToken;
+                for (int i = 0; i < encoded.length; i++)
+                    tokens[i + 1] = Ints.checkedCast(encoded[i]);
+            } else {
+                tokens = Arrays.stream(encoded).mapToInt(Ints::checkedCast).toArray();
+            }
+            if (tokens.length == 0) return 0;
+
+            if (startPos + tokens.length >= c.contextLength) {
+                throw new ContextLengthExceededException(sessionId, startPos, tokens.length, c.contextLength);
+            }
+            batchForward(tokens, startPos, kvmem).close(); // the output is not needed: only the KV cache is filled
+            kvmem.setCurrentContextPosition(startPos + tokens.length);
+            return tokens.length;
+        } finally {
+            activeSessions.remove(sessionId);
+        }
+    }
+
     /** Tokens the session holds in its KV cache; 0 if it has none. */
     public int sessionPosition(UUID sessionId) {
         return kvBufferCache.position(sessionId);
@@ -581,7 +619,9 @@ public abstract class AbstractModel implements Generator {
             try (AbstractTensor logits = makeDenseTensor(c.vocabularySize)) {
                 int[] promptTokens;
 
-                if (addBosToken()) {
+                // The start token begins a sequence: only the first call of a session adds it (Jlama added it to every
+                // call, so from the second turn on it sat in the middle of the conversation)
+                if (addBosToken() && startPos == 0) {
                     promptTokens = new int[(1 + encoded.length)];
 
                     promptTokens[0] = c.bosToken;

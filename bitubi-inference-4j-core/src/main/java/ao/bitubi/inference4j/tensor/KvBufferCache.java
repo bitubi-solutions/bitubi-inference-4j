@@ -42,6 +42,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -233,13 +235,29 @@ public class KvBufferCache implements Closeable {
         }
 
         /**
-         * Mapping a file on an interrupted thread closes the channel and fails with ClosedByInterruptException. A
-         * cancel (an interrupt) can arrive at any time, so the flag is set aside while the page is created.
+         * An interrupt closes the channel of a file being mapped (ClosedByInterruptException), and a cancel is an
+         * interrupt that can arrive at any time. A file-backed page is therefore created on a helper thread that nobody
+         * interrupts; the caller waits for it and keeps its own interrupt flag, so the engine still sees the cancel.
          */
         private KvBufferPage newPage(String pageId) {
-            boolean interrupted = Thread.interrupted();
+            if (ephemeral || model.getConfig().workingDirectory().isEmpty()) {
+                return new KvBufferPage(pageContext, pageId, ephemeral); // memory only: no channel to protect
+            }
+            FutureTask<KvBufferPage> creation = new FutureTask<>(() -> new KvBufferPage(pageContext, pageId, false));
+            Thread.ofVirtual().name("bi4j-kv-page").start(creation);
+            boolean interrupted = false;
             try {
-                return new KvBufferPage(pageContext, pageId, ephemeral);
+                while (true) {
+                    try {
+                        return creation.get();
+                    } catch (InterruptedException e) {
+                        interrupted = true; // keep waiting: a half-made page would be worse than a late cancel
+                    } catch (ExecutionException e) {
+                        if (e.getCause() instanceof RuntimeException r) throw r;
+                        if (e.getCause() instanceof Error err) throw err;
+                        throw new IllegalStateException(e.getCause());
+                    }
+                }
             } finally {
                 if (interrupted) Thread.currentThread().interrupt();
             }

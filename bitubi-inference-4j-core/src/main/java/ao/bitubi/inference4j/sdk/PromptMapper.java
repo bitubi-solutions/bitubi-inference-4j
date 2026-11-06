@@ -41,10 +41,16 @@ final class PromptMapper {
      *     prompt and the like) is left out
      */
     static PromptContext toPrompt(Optional<PromptSupport> support, List<Message> messages, boolean continuation) {
+        return toPrompt(support, messages, continuation, true);
+    }
+
+    /** @param generationPrompt false for a prompt that only records earlier turns: no answer is asked for */
+    static PromptContext toPrompt(Optional<PromptSupport> support, List<Message> messages, boolean continuation, boolean generationPrompt) {
         if (support.isEmpty()) {
             return PromptContext.of(messages.stream().map(Message::text).collect(Collectors.joining("\n\n")));
         }
         PromptSupport.Builder b = support.get().builder();
+        b.addGenerationPrompt(generationPrompt);
         if (continuation) b.stripPreamble();
         for (Message m : messages) {
             switch (m.role()) {

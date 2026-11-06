@@ -182,6 +182,18 @@ final class DefaultBi4j implements Bi4j {
         return model;
     }
 
+    /** Like {@link #run} but only fills the session's KV cache; see {@link Engine#prefill}. */
+    int prefill(UUID session, PromptContext prompt) {
+        Thread me = Thread.currentThread();
+        generating.add(me);
+        try {
+            ensureOpen();
+            return engine.prefill(session, prompt);
+        } finally {
+            generating.remove(me);
+        }
+    }
+
     /** Runs a generation on the calling thread; {@link #close()} interrupts and waits for every such thread. */
     ChatResponse run(UUID session, PromptContext prompt, GenerationSettings settings, Consumer<Token> onToken) {
         Thread me = Thread.currentThread();

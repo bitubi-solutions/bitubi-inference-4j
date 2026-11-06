@@ -101,6 +101,49 @@ final class DefaultChatSession implements ChatSession {
     }
 
     @Override
+    public int restore(List<Message> earlier) {
+        List<Message> messages = List.copyOf(earlier);
+        owner.ensureOpen();
+        if (closed.get()) throw new IllegalStateException("ChatSession is closed");
+        if (options.temporary()) throw new IllegalStateException("A temporary session keeps nothing: restore needs a persistent session");
+        for (Message m : messages) {
+            if (m.role() == Message.Role.SYSTEM) {
+                throw new IllegalArgumentException(
+                    "restore takes USER and ASSISTANT messages; the system message comes from the session options"
+                );
+            }
+            PromptMapper.checkInputs(owner.capabilities(), List.of(m));
+        }
+        acquire();
+        try {
+            if (started) throw new IllegalStateException("The session already holds a conversation: restore needs a fresh session");
+            if (messages.isEmpty()) return 0;
+            List<Message> all = new ArrayList<>();
+            if (options.system() != null) all.add(Message.system(options.system()));
+            all.addAll(messages);
+            int tokens = owner.prefill(id, PromptMapper.toPrompt(owner.model().promptSupport(), all, false, false));
+            started = true;
+            synchronized (history) {
+                history.addAll(messages);
+            }
+            return tokens;
+        } finally {
+            release();
+        }
+    }
+
+    @Override
+    public int contextTokens() {
+        owner.ensureOpen();
+        return owner.model().sessionPosition(id);
+    }
+
+    @Override
+    public int contextRemaining() {
+        return owner.capabilities().contextLength() - contextTokens();
+    }
+
+    @Override
     public List<Message> history() {
         synchronized (history) {
             return List.copyOf(history);
