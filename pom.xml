@@ -277,6 +277,7 @@
           <module>bitubi-inference-4j-net</module>
           <module>bitubi-inference-4j-cli</module>
           <module>bitubi-inference-4j-tests</module>
+          <module>examples</module>
       </modules>
     </profile>
     <profile>

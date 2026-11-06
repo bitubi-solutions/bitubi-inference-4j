@@ -89,49 +89,54 @@ The artifacts use the `groupId` `ao.bitubi`. Publishing starts on GitHub Package
 </dependency>
 ```
 
-Enable the Vector API in the JVM: `--add-modules jdk.incubator.vector --enable-preview`.
+The engine needs the Vector API: start the JVM with `--add-modules jdk.incubator.vector`. The SDK checks this when
+it loads a model and, if the flag is missing, says exactly where to add it.
+
+### SDK
+
+The SDK lives in the package `ao.bitubi.inference4j.sdk` and uses only what the JDK offers.
 
 ```java
-public void sample() throws IOException {
-    String model = "tjake/Llama-3.2-1B-Instruct-JQ4";
-    String workingDirectory = "./models";
-    String prompt = "What is the best season to plant avocados?";
-
-    // Downloads the model, or returns the local path if it is already downloaded
-    File localModelPath = SafeTensorSupport.maybeDownloadModel(workingDirectory, model);
-
-    // Loads the quantized model
-    AbstractModel m = ModelSupport.loadModel(localModelPath, DType.F32, DType.I8);
-
-    PromptContext ctx;
-    if (m.promptSupport().isPresent()) {
-        ctx = m.promptSupport()
-                .get()
-                .builder()
-                .addSystemMessage("You are a helpful chatbot who writes short responses.")
-                .addUserMessage(prompt)
-                .build();
-    } else {
-        ctx = PromptContext.of(prompt);
-    }
-
-    // The fourth argument is the total token limit (prompt included)
-    Generator.Response r = m.generate(UUID.randomUUID(), ctx, 0.0f, 256, (s, f) -> {});
-    System.out.println(r.responseText);
+try (Bi4j bi4j = Bi4j.load("tjake/Llama-3.2-1B-Instruct-JQ4");
+     Stream<Token> tokens = bi4j.chat().user("When is the best time to plant avocado?").stream()) {
+    tokens.forEach(token -> System.out.print(token.text()));
 }
 ```
 
-Or with the **Builder API**:
+One answer at a time, as a value:
 
 ```java
-Generator.Response r = m.generateBuilder()
-        .session(UUID.randomUUID())            // default: UUID.randomUUID()
-        .promptContext(ctx)                    // required, or prompt(String text)
-        .ntokens(256)                          // default: 256
-        .temperature(0.0f)                     // default: 0.0f
-        .onTokenWithTimings((s, t) -> {})      // default: does nothing
-        .generate();
+ChatResponse r = bi4j.chat()
+    .system("You are a concise assistant.")
+    .user("When is the best time to plant avocado?")
+    .maxNewTokens(256)       // new tokens only; the prompt does not count
+    .temperature(0.2f)
+    .stop("\n\n")           // optional stop sequences
+    .generate();
+System.out.println(r.text() + " (" + r.usage().tokensPerSecond() + " tokens/s)");
 ```
+
+A conversation keeps its history in the model, so each turn only processes the new message:
+
+```java
+try (ChatSession chat = bi4j.newSession(s -> s.system("Be brief."))) {
+    chat.send("My name is Ana.");
+    System.out.println(chat.send("What is my name?").text());
+}
+```
+
+* **Streaming is a `java.util.stream.Stream<Token>`.** Closing it, or ending it early with `limit` or `takeWhile`
+  inside try-with-resources, stops the generation at the next token.
+* **Sessions are persistent by default** (the KV cache stays until `close()`). `s.temporary()` frees it after every call.
+* **Working types are automatic**: the SDK estimates the memory before loading and fails with the numbers and the fix
+  if the model does not fit. `Bi4j.builder().workingTypes(...)` overrides it at your own risk, with a warning.
+* **Errors are typed**: `Bi4jException` is sealed (`ModelNotFoundException`, `UnsupportedModelException`,
+  `InsufficientMemoryException`, `EngineSetupException`, `SessionBusyException`, `ContextLengthExceededException`,
+  `UnsupportedInputException`), and every message says what to do.
+* **Observability** needs no dependency: JFR events `ao.bitubi.inference4j.Load` and `ao.bitubi.inference4j.Generation`.
+
+Runnable versions are in [`examples/`](./examples). The classes outside the `sdk` package (`AbstractModel`,
+`ModelSupport` and the like) are the engine: they are internal and may change without notice.
 
 ## Roadmap
 

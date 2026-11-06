@@ -15,10 +15,15 @@ package ao.bitubi.inference4j.sdk;
 /** The JVM is not set up for the engine, for example a missing flag. */
 public final class EngineSetupException extends Bi4jException {
 
+    /** @param message the missing setting and how to fix it */
     public EngineSetupException(String message) {
         super(message);
     }
 
+    /**
+     * @param message the missing setting and how to fix it
+     * @param cause the underlying error
+     */
     public EngineSetupException(String message, Throwable cause) {
         super(message, cause);
     }

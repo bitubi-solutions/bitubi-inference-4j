@@ -20,30 +20,39 @@ import java.util.Set;
 /** One turn of a conversation: who said it and what, as one or more {@link Part parts}. */
 public record Message(Role role, List<Part> parts) {
 
+    /** Who says a message. */
     public enum Role {
+        /** Instructions for the model. */
         SYSTEM,
+        /** The person talking to the model. */
         USER,
+        /** The model. */
         ASSISTANT
     }
 
+    /** Copies the parts; rejects an empty list. */
     public Message {
         Objects.requireNonNull(role, "role");
         parts = List.copyOf(parts);
         if (parts.isEmpty()) throw new IllegalArgumentException("a message needs at least one part");
     }
 
+    /** A system message with one text part. */
     public static Message system(String text) {
         return new Message(Role.SYSTEM, List.of(Part.text(text)));
     }
 
+    /** A user message with one text part. */
     public static Message user(String text) {
         return new Message(Role.USER, List.of(Part.text(text)));
     }
 
+    /** A user message made of the given parts. */
     public static Message user(Part... parts) {
         return new Message(Role.USER, List.of(parts));
     }
 
+    /** An assistant message with one text part. */
     public static Message assistant(String text) {
         return new Message(Role.ASSISTANT, List.of(Part.text(text)));
     }

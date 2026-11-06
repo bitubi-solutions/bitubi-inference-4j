@@ -24,6 +24,7 @@ import java.util.Objects;
  */
 public record GenerationSettings(int maxNewTokens, float temperature, List<String> stop) {
 
+    /** Validates the values; see the record components. */
     public GenerationSettings {
         if (maxNewTokens <= 0) throw new IllegalArgumentException("maxNewTokens must be positive: " + maxNewTokens);
         if (Float.isNaN(temperature) || temperature < 0) {
@@ -41,14 +42,17 @@ public record GenerationSettings(int maxNewTokens, float temperature, List<Strin
         return new GenerationSettings(512, 0.7f, List.of());
     }
 
+    /** A copy with another {@code maxNewTokens}. */
     public GenerationSettings withMaxNewTokens(int maxNewTokens) {
         return new GenerationSettings(maxNewTokens, temperature, stop);
     }
 
+    /** A copy with another {@code temperature}. */
     public GenerationSettings withTemperature(float temperature) {
         return new GenerationSettings(maxNewTokens, temperature, stop);
     }
 
+    /** A copy with other stop sequences. */
     public GenerationSettings withStop(List<String> stop) {
         return new GenerationSettings(maxNewTokens, temperature, stop);
     }

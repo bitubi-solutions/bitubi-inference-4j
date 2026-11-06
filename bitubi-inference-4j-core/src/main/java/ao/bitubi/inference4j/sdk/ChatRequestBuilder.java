@@ -30,11 +30,13 @@ public final class ChatRequestBuilder {
         this.bi4j = bi4j;
     }
 
+    /** Adds a system message. */
     public ChatRequestBuilder system(String text) {
         messages.add(Message.system(text));
         return this;
     }
 
+    /** Adds a user message. */
     public ChatRequestBuilder user(String text) {
         messages.add(Message.user(text));
         return this;
@@ -46,21 +48,25 @@ public final class ChatRequestBuilder {
         return this;
     }
 
+    /** Adds an assistant message, for example an earlier answer. */
     public ChatRequestBuilder assistant(String text) {
         messages.add(Message.assistant(text));
         return this;
     }
 
+    /** Most new tokens to generate; the prompt does not count. */
     public ChatRequestBuilder maxNewTokens(int maxNewTokens) {
         settings = settings.withMaxNewTokens(maxNewTokens);
         return this;
     }
 
+    /** 0 always picks the most likely token; higher values vary more. */
     public ChatRequestBuilder temperature(float temperature) {
         settings = settings.withTemperature(temperature);
         return this;
     }
 
+    /** Texts that end the generation; the matching text is not part of the answer. */
     public ChatRequestBuilder stop(String... stop) {
         settings = settings.withStop(List.of(Objects.requireNonNull(stop)));
         return this;

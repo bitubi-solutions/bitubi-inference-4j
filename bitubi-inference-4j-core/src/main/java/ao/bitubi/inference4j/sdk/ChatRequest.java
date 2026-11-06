@@ -17,6 +17,7 @@ import java.util.List;
 /** A chat to run: the messages and how to generate. An immutable value: build it once, send it as often as needed. */
 public record ChatRequest(List<Message> messages, GenerationSettings settings) {
 
+    /** Copies the messages; rejects an empty list. */
     public ChatRequest {
         messages = List.copyOf(messages);
         if (messages.isEmpty()) throw new IllegalArgumentException("a chat request needs at least one message");

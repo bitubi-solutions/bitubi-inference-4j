@@ -19,10 +19,15 @@ package ao.bitubi.inference4j.sdk;
 public abstract sealed class Bi4jException extends RuntimeException permits ModelNotFoundException, UnsupportedModelException,
     InsufficientMemoryException, EngineSetupException, SessionBusyException, ContextLengthExceededException, UnsupportedInputException {
 
+    /** @param message what happened and what to do about it */
     protected Bi4jException(String message) {
         super(message);
     }
 
+    /**
+     * @param message what happened and what to do about it
+     * @param cause the underlying error
+     */
     protected Bi4jException(String message, Throwable cause) {
         super(message, cause);
     }

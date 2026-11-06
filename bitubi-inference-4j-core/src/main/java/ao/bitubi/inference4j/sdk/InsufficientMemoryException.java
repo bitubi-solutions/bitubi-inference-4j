@@ -15,10 +15,15 @@ package ao.bitubi.inference4j.sdk;
 /** The model does not fit the available memory or disk. */
 public final class InsufficientMemoryException extends Bi4jException {
 
+    /** @param message what does not fit and what to change */
     public InsufficientMemoryException(String message) {
         super(message);
     }
 
+    /**
+     * @param message what does not fit and what to change
+     * @param cause the underlying error
+     */
     public InsufficientMemoryException(String message, Throwable cause) {
         super(message, cause);
     }

@@ -14,7 +14,10 @@ package ao.bitubi.inference4j.sdk;
 
 /** A kind of input a model can read. Today every model reads {@link #TEXT} only. */
 public enum Modality {
+    /** Written text. */
     TEXT,
+    /** A picture (PNG, JPEG, GIF or WebP). */
     IMAGE,
+    /** Sound as mono PCM samples. */
     AUDIO
 }

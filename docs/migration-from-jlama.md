@@ -258,6 +258,31 @@ AbstractModel m = ModelSupport.loadModel(local, DType.F32, DType.I8);
 Generator.Response r = m.generate(UUID.randomUUID(), PromptContext.of("Hi"), 0.0f, 256, (s, f) -> {});
 ```
 
+### Java: from the loose API to the SDK
+
+The classes you called in Jlama (`SafeTensorSupport`, `ModelSupport`, `AbstractModel`, `PromptContext`) are now the
+engine, kept for the project's own modules. New code should use the SDK in `ao.bitubi.inference4j.sdk`:
+
+| Jlama | bitubi-inference-4j SDK |
+|---|---|
+| `SafeTensorSupport.maybeDownloadModel(dir, id)` + `ModelSupport.loadModel(file, DType.F32, DType.I8)` | `Bi4j.builder().model(id).modelsDir(Path.of(dir)).build()`: downloads, picks the working types and checks the memory |
+| `model.promptSupport().get().builder().addSystemMessage(...).addUserMessage(...).build()` | `bi4j.chat().system(...).user(...)` |
+| `model.generate(UUID, ctx, temperature, ntokens, callback)` | `bi4j.chat()....generate()` for one answer, `.stream()` for tokens |
+| `callback` receiving each token, no way to stop | `Stream<Token>`: close it or use `limit`/`takeWhile` |
+| a `UUID` per conversation, passed to every `generate` | `ChatSession`: `send` and `stream`, `close()` frees it |
+| `model.embed(text, PoolingType.AVG)` | `bi4j.embed(text)` |
+| `IllegalArgumentException`, `IOException`, `RuntimeException` | the sealed `Bi4jException` hierarchy |
+
+Behavior changes that apply even if you keep calling the engine directly:
+
+* The fourth argument of `generate` counts **new tokens only**. In Jlama it limited prompt plus output, so a prompt longer
+  than it failed with "Prompt exceeds max tokens".
+* A session counts its prompt in the KV cache. In Jlama only generated tokens were counted, so from the second turn on
+  the new prompt overwrote the old one and the conversation lost its history.
+* A session keeps its KV cache until `releaseSession(UUID)` or `close()`, and its page files are deleted then. Jlama
+  left them in the temporary directory.
+* A prompt that does not fit the context window fails with `ContextLengthExceededException`.
+
 ### Command line and launcher
 
 ```bash

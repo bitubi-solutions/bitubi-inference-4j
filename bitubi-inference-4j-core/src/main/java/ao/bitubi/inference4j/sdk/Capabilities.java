@@ -17,6 +17,7 @@ import java.util.Set;
 /** What a loaded model can do. */
 public record Capabilities(Set<Modality> inputs, boolean chat, boolean embeddings, int contextLength) {
 
+    /** Copies the input set so the record stays immutable. */
     public Capabilities {
         inputs = Set.copyOf(inputs);
     }

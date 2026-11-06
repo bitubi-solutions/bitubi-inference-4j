@@ -31,6 +31,7 @@ import java.util.stream.Stream;
  */
 public interface Bi4j extends AutoCloseable {
 
+    /** Starts building a {@link Bi4j}. */
     static Builder builder() {
         return new Builder();
     }

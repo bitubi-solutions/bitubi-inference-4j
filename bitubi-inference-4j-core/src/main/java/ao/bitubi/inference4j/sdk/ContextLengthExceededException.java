@@ -17,6 +17,12 @@ import java.util.UUID;
 /** Thrown when a session's tokens plus the new prompt do not fit in the model's context window. */
 public final class ContextLengthExceededException extends Bi4jException {
 
+    /**
+     * @param sessionId the session
+     * @param sessionTokens tokens the session already holds
+     * @param promptTokens tokens the new prompt adds
+     * @param contextLength the context window
+     */
     public ContextLengthExceededException(UUID sessionId, int sessionTokens, int promptTokens, int contextLength) {
         super(
             "Session "

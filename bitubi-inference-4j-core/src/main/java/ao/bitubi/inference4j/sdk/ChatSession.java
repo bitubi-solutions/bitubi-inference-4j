@@ -46,6 +46,7 @@ public interface ChatSession extends AutoCloseable {
     /** The user and assistant messages so far, oldest first; empty for a temporary session. Immutable copy. */
     List<Message> history();
 
+    /** The id of this session in the engine; it also names its KV page files. */
     UUID id();
 
     /** Frees the session's KV cache and deletes its page files. Safe to call more than once. */
