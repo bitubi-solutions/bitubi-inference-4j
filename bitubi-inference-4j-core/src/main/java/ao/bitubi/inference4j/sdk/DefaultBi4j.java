@@ -16,6 +16,7 @@ import ao.bitubi.inference4j.model.AbstractModel;
 import ao.bitubi.inference4j.model.ModelSupport;
 import ao.bitubi.inference4j.model.functions.Generator;
 import ao.bitubi.inference4j.safetensors.SafeTensorSupport;
+import ao.bitubi.inference4j.safetensors.prompt.PromptContext;
 import ao.bitubi.inference4j.util.Bi4jProperties;
 import java.io.File;
 import java.io.IOException;
@@ -37,11 +38,13 @@ import org.slf4j.LoggerFactory;
 
 final class DefaultBi4j implements Bi4j {
     private static final Logger logger = LoggerFactory.getLogger(Bi4j.class);
+    private static final long CLOSE_WAIT_NANOS = 30_000_000_000L;
 
     private final AbstractModel model;
     private final ModelInspection inspection;
     private final Path workDir;
     private final Engine engine;
+    private final Set<Thread> generating = ConcurrentHashMap.newKeySet(); // threads inside a generation
     private final Capabilities capabilities;
     private final AtomicBoolean closed = new AtomicBoolean();
     private final Set<DefaultChatSession> sessions = ConcurrentHashMap.newKeySet();
@@ -179,8 +182,16 @@ final class DefaultBi4j implements Bi4j {
         return model;
     }
 
-    Engine engine() {
-        return engine;
+    /** Runs a generation on the calling thread; {@link #close()} interrupts and waits for every such thread. */
+    ChatResponse run(UUID session, PromptContext prompt, GenerationSettings settings, Consumer<Token> onToken) {
+        Thread me = Thread.currentThread();
+        generating.add(me);
+        try {
+            ensureOpen(); // close() may have started between the caller's check and now
+            return engine.run(session, prompt, settings, onToken);
+        } finally {
+            generating.remove(me);
+        }
     }
 
     void untrack(DefaultChatSession session) {
@@ -232,12 +243,7 @@ final class DefaultBi4j implements Bi4j {
         PromptMapper.checkInputs(capabilities, request.messages());
         UUID session = UUID.randomUUID();
         try {
-            return engine.run(
-                session,
-                PromptMapper.toPrompt(model.promptSupport(), request.messages(), false),
-                request.settings(),
-                t -> {}
-            );
+            return run(session, PromptMapper.toPrompt(model.promptSupport(), request.messages(), false), request.settings(), t -> {});
         } finally {
             model.releaseSession(session); // temporary session: nothing stays in the KV cache
         }
@@ -251,12 +257,7 @@ final class DefaultBi4j implements Bi4j {
         return TokenStream.open(
             this,
             () -> {},
-            onToken -> engine.run(
-                session,
-                PromptMapper.toPrompt(model.promptSupport(), request.messages(), false),
-                request.settings(),
-                onToken
-            ),
+            onToken -> run(session, PromptMapper.toPrompt(model.promptSupport(), request.messages(), false), request.settings(), onToken),
             () -> model.releaseSession(session) // temporary session
         );
     }
@@ -272,14 +273,34 @@ final class DefaultBi4j implements Bi4j {
     public void close() {
         if (!closed.compareAndSet(false, true)) return;
         try {
-            for (TokenStream s : List.copyOf(streams))
+            for (TokenStream s : List.copyOf(streams)) {
+                logger.warn("A stream was still open when Bi4j was closed; cancelling it. Use streams in try-with-resources.");
+                new UnclosedStreamEvent().commit();
                 s.cancel(); // before the sessions: they hold them busy
+            }
+            stopGenerations();
             for (DefaultChatSession s : List.copyOf(sessions))
                 s.close();
             model.close();
         } finally {
             deleteQuietly(workDir);
         }
+    }
+
+    /** Interrupts every thread still inside a generation and waits for them to leave, so nothing runs on freed memory. */
+    private void stopGenerations() {
+        generating.forEach(Thread::interrupt);
+        long deadline = System.nanoTime() + CLOSE_WAIT_NANOS;
+        boolean interrupted = false;
+        while (!generating.isEmpty() && System.nanoTime() < deadline) {
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                interrupted = true; // keep waiting: freeing the model under a running generation is worse
+            }
+        }
+        if (interrupted) Thread.currentThread().interrupt();
+        if (!generating.isEmpty()) logger.warn("{} generation(s) did not stop within 30 s; closing the model anyway", generating.size());
     }
 
     private static void deleteQuietly(Path dir) {

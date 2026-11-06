@@ -136,6 +136,19 @@ public class ChatSessionTest {
         assertThrows(IllegalStateException.class, () -> chat.send("Hi"));
     }
 
+    @Test(timeout = 60000)
+    public void closingBi4jWhileASendRunsCancelsItAndWaits() throws Exception {
+        Bi4j other = Bi4j.builder().model(MODEL).modelsDir(Path.of("./models")).contextLength(512).build();
+        Path workDir = ((DefaultBi4j) other).workDir();
+        ChatSession chat = other.newSession(s -> s.temperature(0f).maxNewTokens(400));
+        CompletableFuture<ChatResponse> running = CompletableFuture.supplyAsync(() -> chat.send("Write a long story about a dragon."));
+        Thread.sleep(1000);
+        other.close();
+        ChatResponse r = running.get(); // the send ends with a response, it is not left running on freed memory
+        assertEquals(FinishReason.CANCELLED, r.finishReason());
+        assertFalse("work directory removed", Files.exists(workDir));
+    }
+
     @Test
     public void sessionIdsAreDistinct() {
         try (ChatSession a = bi4j.newSession(); ChatSession b = bi4j.newSession()) {

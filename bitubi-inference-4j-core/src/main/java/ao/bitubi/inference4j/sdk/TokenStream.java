@@ -13,6 +13,8 @@
 package ao.bitubi.inference4j.sdk;
 
 import java.util.Spliterator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -28,6 +30,7 @@ import java.util.stream.StreamSupport;
  * generation, which stops at its next token.
  */
 final class TokenStream implements Spliterator<Token> {
+    private static final Logger logger = LoggerFactory.getLogger(Bi4j.class);
     private static final int QUEUE_SIZE = 16;
 
     private record End(Throwable error) {
@@ -83,6 +86,7 @@ final class TokenStream implements Spliterator<Token> {
         finished = true;
         owner.streams().remove(this);
         Throwable error = ((End) item).error();
+        if (cancelled.get() && error == null) throw new IllegalStateException("The stream is closed");
         if (error instanceof Bi4jException || error instanceof IllegalArgumentException || error instanceof IllegalStateException) {
             throw (RuntimeException) error;
         }
@@ -100,7 +104,7 @@ final class TokenStream implements Spliterator<Token> {
     private void produce() {
         Throwable error = null;
         try {
-            run.apply(this::offer);
+            if (!cancelled.get()) run.apply(this::offer); // cancelled while starting: never generate
         } catch (Throwable t) {
             error = t;
         } finally {
@@ -111,12 +115,16 @@ final class TokenStream implements Spliterator<Token> {
             }
         }
         Thread.interrupted(); // the flag asked us to stop; it has done its job
+        End last = new End(error);
         try {
-            while (!cancelled.get() && !queue.offer(new End(error), 100, TimeUnit.MILLISECONDS)) {
-                // the reader is slow: keep trying until it reads or the stream is cancelled
+            while (!queue.offer(last, 100, TimeUnit.MILLISECONDS)) {
+                if (cancelled.get()) { // a full queue means the reader is not waiting; otherwise it must be woken
+                    queue.offer(last);
+                    break;
+                }
             }
-        } catch (InterruptedException ignored) {
-            // cancelled while waiting: nobody is reading any more
+        } catch (InterruptedException e) {
+            queue.offer(last); // cancelled while waiting: wake a reader that may be blocked in take()
         }
     }
 
@@ -135,11 +143,15 @@ final class TokenStream implements Spliterator<Token> {
         Thread t = producer;
         if (t == null) return;
         t.interrupt();
+        boolean interrupted = Thread.interrupted(); // an interrupted closer must still wait, then get its flag back
         try {
             t.join(5000);
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+            interrupted = true;
+        } finally {
+            if (interrupted) Thread.currentThread().interrupt();
         }
+        if (t.isAlive()) logger.warn("A stream did not stop within 5 s; its generation is still running");
     }
 
     @Override

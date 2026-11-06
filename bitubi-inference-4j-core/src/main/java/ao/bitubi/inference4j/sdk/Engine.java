@@ -71,9 +71,12 @@ final class Engine {
         FinishReason reason = switch (r.finishReason) {
             case STOP_TOKEN, TOOL_CALL -> FinishReason.STOP;
             case MAX_TOKENS -> FinishReason.LENGTH;
-            case CANCELLED -> matcher.stopped() ? FinishReason.STOP_SEQUENCE : FinishReason.CANCELLED;
+            case CANCELLED -> FinishReason.CANCELLED;
             case ERROR -> throw new IllegalStateException("The engine reported an error for session " + session);
         };
+        // The stop wins however the engine ended: on the last allowed token or on its own stop token it would
+        // otherwise be reported as LENGTH or STOP
+        if (matcher.stopped()) reason = FinishReason.STOP_SEQUENCE;
 
         long end = System.nanoTime();
         Duration firstToken = Duration.ofNanos(first[0] == 0 ? 0 : first[0] - start);

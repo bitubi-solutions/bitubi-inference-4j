@@ -46,7 +46,7 @@ public class Bi4jLoadTest {
             ModelNotFoundException.class,
             () -> Bi4j.builder().model(Path.of("does/not/exist")).build()
         );
-        assertTrue(e.getMessage(), e.getMessage().contains("does/not/exist"));
+        assertTrue(e.getMessage(), e.getMessage().contains(Path.of("does/not/exist").toString())); // backslashes on Windows
     }
 
     @Test

@@ -14,14 +14,23 @@ package ao.bitubi.inference4j.sdk;
 
 import static org.junit.Assert.*;
 
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import jdk.jfr.Recording;
+import jdk.jfr.consumer.RecordingFile;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.LoggerFactory;
 
 public class StreamingTest {
     private static final String MODEL = "tjake/Qwen2.5-0.5B-Instruct-JQ4";
@@ -114,6 +123,67 @@ public class StreamingTest {
         ) {
             assertThrows(ContextLengthExceededException.class, tokens::toList);
         }
+    }
+
+    @Test(timeout = 20000)
+    public void aStreamCancelledWhileStartingNeverRunsAndDoesNotHangTheReader() {
+        DefaultBi4j owner = (DefaultBi4j) bi4j;
+        AtomicBoolean ran = new AtomicBoolean();
+        AtomicBoolean ended = new AtomicBoolean();
+        // begin() runs on the reader's thread just before the producer starts: cancel the stream right there, the way
+        // Bi4j.close() on another thread would in that window
+        Stream<Token> stream = TokenStream.open(owner, () -> List.copyOf(owner.streams()).forEach(TokenStream::cancel), onToken -> {
+            ran.set(true);
+            return null;
+        }, () -> ended.set(true));
+        assertThrows(IllegalStateException.class, () -> stream.iterator().hasNext());
+        assertFalse("a cancelled stream must not generate", ran.get());
+    }
+
+    @Test
+    public void closingTheStreamWaitsEvenIfTheClosingThreadIsInterrupted() {
+        try (ChatSession chat = bi4j.newSession(s -> s.temperature(0f).maxNewTokens(200))) {
+            Stream<Token> tokens = chat.stream("Count to 50.");
+            Iterator<Token> it = tokens.iterator();
+            assertTrue(it.hasNext());
+            it.next();
+            Thread.currentThread().interrupt();
+            tokens.close();
+            assertTrue("the caller's interrupt is kept", Thread.interrupted());
+            assertNotNull("close waited for the generation to let go of the session", chat.send("Hi"));
+        }
+    }
+
+    @Test
+    public void closingBi4jReportsAStreamLeftOpen() throws Exception {
+        Logger logger = (Logger) LoggerFactory.getLogger(Bi4j.class);
+        ListAppender<ILoggingEvent> appender = new ListAppender<>();
+        appender.start();
+        logger.addAppender(appender);
+        Path jfr = Files.createTempFile("bi4j", ".jfr");
+        try (Recording recording = new Recording()) {
+            recording.enable("ao.bitubi.inference4j.UnclosedStream");
+            recording.start();
+            Bi4j other = Bi4j.builder().model(MODEL).modelsDir(Path.of("./models")).contextLength(256).build();
+            Iterator<Token> it = other.chat().user("Count to 100.").maxNewTokens(100).stream().iterator();
+            assertTrue(it.hasNext());
+            other.close();
+            recording.stop();
+            recording.dump(jfr);
+            // user-defined events are enabled by default, so Load and Generation are in the file too: count only ours
+            long unclosed = RecordingFile.readAllEvents(jfr)
+                .stream()
+                .filter(e -> e.getEventType().getName().equals("ao.bitubi.inference4j.UnclosedStream"))
+                .count();
+            assertEquals(1, unclosed);
+        } finally {
+            logger.detachAppender(appender);
+            Files.deleteIfExists(jfr);
+        }
+        assertTrue(
+            appender.list.toString(),
+            appender.list.stream().anyMatch(e -> e.getLevel() == Level.WARN && e.getFormattedMessage().contains("still open"))
+        );
     }
 
     @Test

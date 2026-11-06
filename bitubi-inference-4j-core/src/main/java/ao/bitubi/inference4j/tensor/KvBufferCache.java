@@ -232,6 +232,19 @@ public class KvBufferCache implements Closeable {
             this.ephemeral = ephemeral;
         }
 
+        /**
+         * Mapping a file on an interrupted thread closes the channel and fails with ClosedByInterruptException. A
+         * cancel (an interrupt) can arrive at any time, so the flag is set aside while the page is created.
+         */
+        private KvBufferPage newPage(String pageId) {
+            boolean interrupted = Thread.interrupted();
+            try {
+                return new KvBufferPage(pageContext, pageId, ephemeral);
+            } finally {
+                if (interrupted) Thread.currentThread().interrupt();
+            }
+        }
+
         public int getCurrentContextPosition() {
             return currentContextPosition.get();
         }
@@ -336,7 +349,7 @@ public class KvBufferCache implements Closeable {
 
             KvBufferPage page = pages[layerPageIndex][contextPageIndex];
             if (page == null || page.isClosed()) {
-                page = new KvBufferPage(pageContext, "L" + layerPageIndex + "C" + contextPageIndex, ephemeral);
+                page = newPage("L" + layerPageIndex + "C" + contextPageIndex);
                 pages[layerPageIndex][contextPageIndex] = page;
             }
 
@@ -364,7 +377,7 @@ public class KvBufferCache implements Closeable {
                 KvBufferPage page = layerPages[i];
 
                 if (page == null || page.isClosed()) {
-                    page = new KvBufferPage(pageContext, "L" + layerPageIndex + "C" + contextPageIndex, ephemeral);
+                    page = newPage("L" + layerPageIndex + "C" + contextPageIndex);
                     layerPages[i] = page;
                 }
 

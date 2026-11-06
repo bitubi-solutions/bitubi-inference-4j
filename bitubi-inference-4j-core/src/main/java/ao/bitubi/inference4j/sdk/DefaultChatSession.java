@@ -89,7 +89,7 @@ final class DefaultChatSession implements ChatSession {
         turn.add(message);
         PromptContext prompt = PromptMapper.toPrompt(owner.model().promptSupport(), turn, !fresh);
 
-        ChatResponse response = owner.engine().run(id, prompt, options.defaults(), onToken);
+        ChatResponse response = owner.run(id, prompt, options.defaults(), onToken);
         if (!options.temporary()) {
             started = true;
             synchronized (history) {

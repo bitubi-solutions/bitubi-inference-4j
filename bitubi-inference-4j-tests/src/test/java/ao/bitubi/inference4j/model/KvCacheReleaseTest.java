@@ -56,6 +56,22 @@ public class KvCacheReleaseTest {
         assertEquals("close deletes what was never released", 0, pageFiles(work, kept));
     }
 
+    @Test
+    public void creatingAPageOnAnInterruptedThreadDoesNotFailAndKeepsTheFlag() throws Exception {
+        File dir = SafeTensorSupport.maybeDownloadModel("./models", "tjake/Qwen2.5-0.5B-Instruct-JQ4");
+        Path work = temporary.newFolder("work2").toPath();
+        try (AbstractModel model = ModelSupport.loadModel(dir, work.toFile(), DType.F32, DType.I8, Optional.empty(), Optional.empty())) {
+            var kv = model.kvBufferCache.getKvBuffer(UUID.randomUUID());
+            Thread.currentThread().interrupt(); // a cancel can arrive while the next page is being mapped
+            try {
+                kv.getKeyTensorForPosition(0, 0); // maps a file: an interrupted thread would close its channel
+                assertTrue("the interrupt is still pending", Thread.currentThread().isInterrupted());
+            } finally {
+                Thread.interrupted();
+            }
+        }
+    }
+
     private static long pageFiles(Path dir, UUID session) throws Exception {
         try (Stream<Path> files = Files.list(dir)) {
             return files.filter(p -> p.getFileName().toString().startsWith(session + "-")).count();

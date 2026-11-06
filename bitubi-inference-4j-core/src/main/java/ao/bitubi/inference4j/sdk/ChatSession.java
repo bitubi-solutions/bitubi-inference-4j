@@ -26,7 +26,13 @@ import java.util.stream.Stream;
  */
 public interface ChatSession extends AutoCloseable {
 
-    /** Sends a user message and waits for the whole answer. */
+    /**
+     * Sends a user message and waits for the whole answer.
+     *
+     * <p>If a call is cut short (a stream closed early, or a stop sequence), the model's KV cache keeps what it had
+     * generated up to that point, which can be a few tokens more than the text you received; {@link #history()}
+     * holds the text you received.
+     */
     ChatResponse send(String userText);
 
     /**

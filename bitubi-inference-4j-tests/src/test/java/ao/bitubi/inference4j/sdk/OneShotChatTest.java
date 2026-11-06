@@ -13,6 +13,7 @@
 package ao.bitubi.inference4j.sdk;
 
 import static org.junit.Assert.*;
+import static org.junit.Assume.assumeFalse;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -82,6 +83,31 @@ public class OneShotChatTest {
         assertEquals(r.text(), FinishReason.STOP_SEQUENCE, r.finishReason());
         assertFalse(r.text(), r.text().contains("5"));
         assertTrue(r.text(), r.text().contains("4"));
+    }
+
+    @Test
+    public void aStopSpanningSeveralTokensStillStops() {
+        ChatRequest probe = bi4j.chat()
+            .user("Count from 1 to 20, one number per line.")
+            .stop("5")
+            .maxNewTokens(64)
+            .temperature(0f)
+            .request();
+        String before = bi4j.generate(probe).text(); // ends just before the "5"
+        assertTrue(before, before.length() >= 2);
+        String tail = before.substring(before.length() - 2); // a few characters of the previous tokens
+        ChatResponse r = bi4j.generate(new ChatRequest(probe.messages(), probe.settings().withStop(List.of(tail + "5"))));
+        assertEquals(r.text(), FinishReason.STOP_SEQUENCE, r.finishReason());
+        assertEquals(before.substring(0, before.length() - 2), r.text());
+    }
+
+    @Test
+    public void aStopOnTheLastAllowedTokenIsStillReportedAsAStop() {
+        String first = bi4j.chat().user("Say hello.").maxNewTokens(1).temperature(0f).generate().text();
+        assumeFalse("the first token has text", first.isEmpty());
+        ChatResponse r = bi4j.chat().user("Say hello.").maxNewTokens(1).temperature(0f).stop(first).generate();
+        assertEquals(FinishReason.STOP_SEQUENCE, r.finishReason());
+        assertEquals("", r.text());
     }
 
     @Test
