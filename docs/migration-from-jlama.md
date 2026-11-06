@@ -282,6 +282,9 @@ Behavior changes that apply even if you keep calling the engine directly:
 * A session keeps its KV cache until `releaseSession(UUID)` or `close()`, and its page files are deleted then. Jlama
   left them in the temporary directory.
 * A prompt that does not fit the context window fails with `ContextLengthExceededException`.
+* The model's start token is added only to the first call of a session. Jlama added it to every call, so from the
+  second turn on it sat in the middle of the conversation, and some models (Qwen) answered as if they had forgotten
+  everything before it.
 
 ### Command line and launcher
 

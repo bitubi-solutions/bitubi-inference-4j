@@ -125,6 +125,21 @@ try (ChatSession chat = bi4j.newSession(s -> s.system("Be brief."))) {
 }
 ```
 
+For a Stop button, a status line or a server, `start` returns a `Generation`: the tokens, the outcome and a cancel that
+is safe from any thread. `restore` feeds a saved conversation back into a fresh session without generating, and the
+builder can report the steps of a load:
+
+```java
+try (Generation g = chat.start("Tell me a story", GenerationSettings.defaults().withTemperature(0.3f))) {
+    new Thread(() -> g.tokens().forEach(t -> System.out.print(t.text()))).start();
+    // ... when the user presses Stop, from any thread:
+    g.cancel();                       // the reader's stream ends normally
+    g.result().ifPresent(r -> System.out.println(r.finishReason() + " " + r.usage()));
+}
+chat.contextRemaining();              // tokens left; chat.restore(savedMessages) after a restart
+Bi4j.builder().model("tjake/Llama-3.2-1B-Instruct-JQ4").onProgress(p -> System.out.println(p.phase())).build().info();
+```
+
 * **Streaming is a `java.util.stream.Stream<Token>`.** Closing it, or ending it early with `limit` or `takeWhile`
   inside try-with-resources, stops the generation at the next token.
 * **Sessions are persistent by default** (the KV cache stays until `close()`). `s.temporary()` frees it after every call.

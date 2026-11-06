@@ -389,7 +389,9 @@ for SDK-adjacent users). The OpenAI API error codes `session_busy` and `context_
 
 ## 14. Notes for the SDK spec (gaps found while designing the server)
 
-The server must not reach into engine classes, so these go back to `2026-10-12-sdk-dx-design.md`:
+The server must not reach into engine classes, so these go back to `2026-10-12-sdk-dx-design.md`.
+**Items 1 to 7 are closed** (implemented on 2026-11-06; signatures and semantics in section 13 of the SDK spec:
+`restore`, per-call settings, `Generation`, `cancel`, `contextTokens`, `onProgress`, `info`). Item 8 stays open.
 1. **Seed a session with history without generating** (`SessionOptions` with prior `Message`s, prefill only). Needed
    for restart recovery and eviction (section 7). Without it the server replays through `send`, which would generate.
 2. **Per-call generation settings** on `ChatSession.send/stream` (temperature, max tokens): the UI changes them between
