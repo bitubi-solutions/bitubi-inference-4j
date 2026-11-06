@@ -179,8 +179,15 @@ already exist in the engine. They move under `Bi4jException`, which changes thei
 - This is enforced for applications on the module path. On the class path, Java cannot hide packages. There, the
   engine packages are documented as internal and excluded from the published Javadoc, and the migration guide
   points at the SDK.
-- Risk to check first in phase 2: some dependencies (Guava, Jackson, the FFM native loader) may not work as
-  automatic modules. If they do not, encapsulation on the class path is documentation only, and phase 2 says so.
+- Checked in phase 2 (2026-11-06): the dependencies work as modules. Jackson and the template engine reach the
+  engine through qualified `opens`, one line per engine package, to `com.fasterxml.jackson.databind` and `jinjava`
+  only. The one conflict was a transitive `com.google.code.findbugs:annotations` that exports the same package as
+  `jsr305`; it is excluded from `jinjava` in the core pom. `jinjava` and `jctools-core` have no module name, so
+  `requires` uses the names derived from their file names (the build warns not to publish such a module to a public
+  repository such as Maven Central; GitHub Packages is fine, but the names must be revisited if either library adds one).
+  The native backend shares the package `ao.bitubi.inference4j.tensor.operations` with the engine, so it cannot be a
+  separate module: it stays class-path only. `ModulePathTest` in `examples` runs a model on the module path and
+  checks that the engine is refused. Javadoc covers only the exported package.
 
 ## 10. Observability
 

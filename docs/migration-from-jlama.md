@@ -329,8 +329,14 @@ What the recipe does:
 | `MigrateFromJlama.Dependencies` | renames `com.github.tjake:jlama-{core,native,net,cli}` to `ao.bitubi:bitubi-inference-4j-*` in `pom.xml` |
 | `MigrateFromJlama.Types` | renames the classes in the [classes table](#renamed-classes), then every `com.github.tjake.jlama.*` package, in Java sources and imports |
 | `MigrateFromJlama.Contracts` | `jlama.*` keys in `.properties` and `.yaml`, `-Djlama.*` in scripts, YAML and XML, `JLAMA_*` variables, and the `X-Jlama-Session` header literal |
+| `MigrateFromJlama.FindLooseApi` | changes nothing: puts the search marker `/*~~>*/` before each call to `ModelSupport.loadModel`, `loadEmbeddingModel` and `loadClassifierModel`, `SafeTensorSupport.maybeDownloadModel`, `AbstractModel.generate` and `embed` |
 
 What it does **not** do; finish these by hand:
+
+* **Moving to the SDK.** Replacing the loose API (`ModelSupport`, `AbstractModel`) with `Bi4j` changes how a program is
+  written, so it is not mechanical. The recipe marks each call with `/*~~>*/`; search your sources for that marker and
+  use the table in [Java: from the loose API to the SDK](#java-from-the-loose-api-to-the-sdk). Remove the markers
+  as you go: they are comments the recipe added, not part of your code.
 
 * **The version.** It is left as it was (it names a Jlama release that does not exist for the new artifact).
   Set the bitubi-inference-4j version you adopt, and add the GitHub Packages repository to your build.
@@ -352,7 +358,8 @@ literal, a `.properties` file with `jlama.*` keys and a shell script with `-Djla
 The dependency coordinates, imports, class names, literal, property keys and script flags were rewritten as
 described, and the migrated project compiled (JDK 25) against `bitubi-inference-4j-core` and `-net` built from this
 repository (`0.1.0-SNAPSHOT`, installed into a scratch local repository), which confirms the new class names exist.
-Not covered by that run: `.yaml` property keys, the `jlama-native` and `jlama-cli` dependencies and
+The marking recipe was run on the same project: the calls to `maybeDownloadModel`, `loadModel` and `generate` each got
+the marker and nothing else changed. Not covered by that run: `.yaml` property keys, the `jlama-native` and `jlama-cli` dependencies and
 `JsonSupport.JlamaPrettyPrinter` (rules written from the code, not exercised).
 
 ## Roadmap: LangChain4j

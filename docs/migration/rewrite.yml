@@ -12,6 +12,7 @@ recipeList:
   - ao.bitubi.inference4j.MigrateFromJlama.Dependencies
   - ao.bitubi.inference4j.MigrateFromJlama.Types
   - ao.bitubi.inference4j.MigrateFromJlama.Contracts
+  - ao.bitubi.inference4j.MigrateFromJlama.FindLooseApi
 ---
 type: specs.openrewrite.org/v1beta/recipe
 name: ao.bitubi.inference4j.MigrateFromJlama.Dependencies
@@ -148,3 +149,25 @@ recipeList:
       find: X-Jlama-Session
       replace: X-Bi4j-Session
       filePattern: '**/*.{java,js,ts,html,sh,md,yaml,yml,json}'
+---
+type: specs.openrewrite.org/v1beta/recipe
+name: ao.bitubi.inference4j.MigrateFromJlama.FindLooseApi
+displayName: Mark the calls that should move to the SDK
+description: >-
+  The engine classes of Jlama (ModelSupport, AbstractModel, SafeTensorSupport) are internal in bitubi-inference-4j;
+  new code uses the SDK in ao.bitubi.inference4j.sdk. Moving to it changes how a program is written, so it cannot be
+  done mechanically: this recipe only marks each call (as a search result, the comment /*~~>*/ before it) and leaves the
+  code as it is. The table "Java: from the loose API to the SDK" in the migration guide says what to replace each with.
+recipeList:
+  - org.openrewrite.java.search.FindMethods:
+      methodPattern: ao.bitubi.inference4j.model.ModelSupport loadModel(..)
+  - org.openrewrite.java.search.FindMethods:
+      methodPattern: ao.bitubi.inference4j.model.ModelSupport loadEmbeddingModel(..)
+  - org.openrewrite.java.search.FindMethods:
+      methodPattern: ao.bitubi.inference4j.model.ModelSupport loadClassifierModel(..)
+  - org.openrewrite.java.search.FindMethods:
+      methodPattern: ao.bitubi.inference4j.safetensors.SafeTensorSupport maybeDownloadModel(..)
+  - org.openrewrite.java.search.FindMethods:
+      methodPattern: ao.bitubi.inference4j.model.AbstractModel generate(..)
+  - org.openrewrite.java.search.FindMethods:
+      methodPattern: ao.bitubi.inference4j.model.AbstractModel embed(..)

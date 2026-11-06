@@ -40,6 +40,12 @@
                     <groupId>com.google.guava</groupId>
                     <artifactId>guava</artifactId>
                 </exclusion>
+                <!-- compile-time annotations; they export javax.annotation.concurrent like jsr305 does, and two modules
+                     with the same package cannot be on the module path together -->
+                <exclusion>
+                    <groupId>com.google.code.findbugs</groupId>
+                    <artifactId>annotations</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 

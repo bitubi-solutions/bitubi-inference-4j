@@ -135,6 +135,13 @@ try (ChatSession chat = bi4j.newSession(s -> s.system("Be brief."))) {
   `UnsupportedInputException`), and every message says what to do.
 * **Observability** needs no dependency: JFR events `ao.bitubi.inference4j.Load` and `ao.bitubi.inference4j.Generation`.
 
+**On the module path** the engine is a named module, `ao.bitubi.inference4j`, that exports only the `sdk` package, so
+the compiler and reflection refuse everything else, and the module requires the Vector API itself (no
+`--add-modules` flag needed). On the class path Java cannot hide packages: there, treat everything outside `sdk` as
+internal. Two limits: the optional native backend works on the class path only (its package is split with the
+engine), and `jinjava` and `jctools-core` have no module name of their own, so the module requires the names
+Java derives from their file names.
+
 Runnable versions are in [`examples/`](./examples). The classes outside the `sdk` package (`AbstractModel`,
 `ModelSupport` and the like) are the engine: they are internal and may change without notice.
 
