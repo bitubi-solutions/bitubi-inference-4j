@@ -79,6 +79,9 @@ public interface Bi4j extends AutoCloseable {
     /** What this model can do. */
     Capabilities capabilities();
 
+    /** What this model is: its name, family, types and sizes. */
+    ModelInfo info();
+
     /**
      * Embeds a text with the model's own pooling averaged over the tokens.
      *
@@ -100,6 +103,7 @@ public interface Bi4j extends AutoCloseable {
         Integer threads;
         String authToken;
         Supplier<MemoryBudget.Available> available; // tests replace the machine measurement
+        Consumer<LoadProgress> progress;
 
         Builder() {}
 
@@ -149,6 +153,15 @@ public interface Bi4j extends AutoCloseable {
         /** Hugging Face access token for gated or private models. */
         public Builder authToken(String token) {
             this.authToken = token;
+            return this;
+        }
+
+        /**
+         * Reports the steps of the load (download, check, load, ready) to {@code listener}, on the thread that calls
+         * {@link #build()}. An exception thrown by the listener is logged and ignored.
+         */
+        public Builder onProgress(Consumer<LoadProgress> listener) {
+            this.progress = listener;
             return this;
         }
 

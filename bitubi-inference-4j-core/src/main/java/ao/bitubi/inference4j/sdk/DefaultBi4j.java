@@ -46,16 +46,26 @@ final class DefaultBi4j implements Bi4j {
     private final Engine engine;
     private final Set<Thread> generating = ConcurrentHashMap.newKeySet(); // threads inside a generation
     private final Capabilities capabilities;
+    private final ModelInfo info;
     private final AtomicBoolean closed = new AtomicBoolean();
     private final Set<DefaultChatSession> sessions = ConcurrentHashMap.newKeySet();
     private final Set<TokenStream> streams = ConcurrentHashMap.newKeySet();
 
-    private DefaultBi4j(AbstractModel model, ModelInspection inspection, Path workDir, int contextLength) {
+    private DefaultBi4j(AbstractModel model, ModelInspection inspection, Path workDir, int contextLength, String name, WorkingTypes types) {
         this.model = model;
         this.inspection = inspection;
         this.workDir = workDir;
         this.engine = new Engine(model, contextLength);
         boolean embeddings = inspection.type() == ModelSupport.ModelType.BERT;
+        this.info = new ModelInfo(
+            name,
+            inspection.type().name(),
+            inspection.weights().name(),
+            types.memory().name(),
+            types.activations().name(),
+            inspection.weightBytes(),
+            contextLength
+        );
         this.capabilities = new Capabilities(
             Set.of(Modality.TEXT),
             model.promptSupport().isPresent() || !embeddings,
@@ -69,6 +79,7 @@ final class DefaultBi4j implements Bi4j {
         EngineSetup.check(Bi4jProperties.getString("backend"));
 
         Path root = resolve(b);
+        report(b, LoadProgress.Phase.CHECKING, root.toString(), 0, 0);
         ModelInspection inspection;
         try {
             inspection = ModelInspection.of(root);
@@ -117,8 +128,10 @@ final class DefaultBi4j implements Bi4j {
                 }
             }
 
+            report(b, LoadProgress.Phase.LOADING, root.toString(), 0, 0);
             AbstractModel model = load(inspection, root, workDir, types, b.threads);
-            DefaultBi4j bi4j = new DefaultBi4j(model, inspection, workDir, contextLength);
+            String name = b.modelId != null ? b.modelId : root.getFileName().toString();
+            DefaultBi4j bi4j = new DefaultBi4j(model, inspection, workDir, contextLength, name, types);
 
             LoadEvent event = new LoadEvent();
             event.model = root.toString();
@@ -129,6 +142,7 @@ final class DefaultBi4j implements Bi4j {
             event.estimateBytes = MemoryEstimate.of(inspection, types, contextLength).kvBytes() + inspection.weightBytes();
             event.commit();
             logger.info("Loaded {} ({} weights, {}) in {} ms", root, inspection.weights(), types, event.loadMillis);
+            report(b, LoadProgress.Phase.READY, root.toString(), 0, 0);
             return bi4j;
         } catch (IOException e) {
             deleteQuietly(workDir);
@@ -137,6 +151,27 @@ final class DefaultBi4j implements Bi4j {
             deleteQuietly(workDir);
             if (e instanceof Bi4jException || e instanceof IllegalArgumentException) throw e;
             throw new UnsupportedModelException("Cannot load " + root + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** Passes the engine's download progress on, once per percent. */
+    private static ao.bitubi.inference4j.util.ProgressReporter downloadReporter(Builder b) {
+        long[] lastPercent = { -1 };
+        return (file, done, total) -> {
+            long percent = total > 0 ? done * 100 / total : done;
+            if (percent == lastPercent[0] && done < total) return;
+            lastPercent[0] = percent;
+            report(b, LoadProgress.Phase.DOWNLOADING, file, done, total);
+        };
+    }
+
+    /** Tells the builder's listener; whatever the listener throws is logged, never allowed to break the load. */
+    private static void report(Builder b, LoadProgress.Phase phase, String detail, long done, long total) {
+        if (b.progress == null) return;
+        try {
+            b.progress.accept(new LoadProgress(phase, detail, done, total));
+        } catch (RuntimeException e) {
+            logger.warn("The progress listener threw an exception; ignored", e);
         }
     }
 
@@ -155,7 +190,7 @@ final class DefaultBi4j implements Bi4j {
                 true,
                 Optional.empty(),
                 Optional.ofNullable(b.authToken),
-                Optional.empty()
+                b.progress == null ? Optional.empty() : Optional.of(downloadReporter(b))
             );
             return dir.toPath();
         } catch (IOException e) {
@@ -226,6 +261,12 @@ final class DefaultBi4j implements Bi4j {
     public Capabilities capabilities() {
         ensureOpen();
         return capabilities;
+    }
+
+    @Override
+    public ModelInfo info() {
+        ensureOpen();
+        return info;
     }
 
     @Override
