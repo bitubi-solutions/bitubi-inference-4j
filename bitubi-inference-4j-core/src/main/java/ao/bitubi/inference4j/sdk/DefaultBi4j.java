@@ -263,14 +263,26 @@ final class DefaultBi4j implements Bi4j {
 
     @Override
     public Stream<Token> stream(ChatRequest request) {
+        return start(request).tokens();
+    }
+
+    @Override
+    public Generation start(ChatRequest request) {
         ensureOpen();
         PromptMapper.checkInputs(capabilities, request.messages());
         UUID session = UUID.randomUUID();
-        return TokenStream.open(
-            this,
-            () -> {},
-            onToken -> run(session, PromptMapper.toPrompt(model.promptSupport(), request.messages(), false), request.settings(), onToken),
-            () -> model.releaseSession(session) // temporary session
+        return new DefaultGeneration(
+            TokenStream.create(
+                this,
+                () -> {},
+                onToken -> run(
+                    session,
+                    PromptMapper.toPrompt(model.promptSupport(), request.messages(), false),
+                    request.settings(),
+                    onToken
+                ),
+                () -> model.releaseSession(session) // temporary session
+            )
         );
     }
 

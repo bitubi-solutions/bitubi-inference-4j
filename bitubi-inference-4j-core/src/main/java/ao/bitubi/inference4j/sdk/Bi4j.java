@@ -54,6 +54,14 @@ public interface Bi4j extends AutoCloseable {
     ChatResponse generate(ChatRequest request);
 
     /**
+     * Like {@link #stream} but returns a {@link Generation}: the tokens, the outcome ({@link Generation#result()}) and
+     * {@link Generation#cancel()} from any thread.
+     *
+     * @throws UnsupportedInputException a message has an input the model does not read (thrown here, not when read)
+     */
+    Generation start(ChatRequest request);
+
+    /**
      * Like {@link #generate} but hands the answer over token by token. The stream is lazy: generation starts when it is
      * first read. Closing it, or ending it early with {@code limit} or {@code takeWhile} inside try-with-resources,
      * stops the generation at the next token. Use it in try-with-resources: an open stream keeps its work running.

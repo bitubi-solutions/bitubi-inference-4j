@@ -12,6 +12,8 @@
  */
 package ao.bitubi.inference4j.sdk;
 
+import java.time.Duration;
+import java.util.Optional;
 import java.util.Spliterator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +44,8 @@ final class TokenStream implements Spliterator<Token> {
     private final Runnable end;
     private final BlockingQueue<Object> queue = new ArrayBlockingQueue<>(QUEUE_SIZE);
     private final AtomicBoolean cancelled = new AtomicBoolean();
+    private final AtomicBoolean stopRequested = new AtomicBoolean();
+    private volatile ChatResponse result;
     private volatile Thread producer;
     private boolean started;
     private boolean finished;
@@ -61,9 +65,34 @@ final class TokenStream implements Spliterator<Token> {
      *     of the stream is seen by the reader
      */
     static Stream<Token> open(DefaultBi4j owner, Runnable begin, Function<Consumer<Token>, ChatResponse> run, Runnable end) {
+        return create(owner, begin, run, end).stream();
+    }
+
+    /** Like {@link #open} but keeps the object, for the result and for a graceful stop. */
+    static TokenStream create(DefaultBi4j owner, Runnable begin, Function<Consumer<Token>, ChatResponse> run, Runnable end) {
         TokenStream s = new TokenStream(owner, begin, run, end);
         owner.streams().add(s);
-        return StreamSupport.stream(s, false).onClose(s::cancel);
+        return s;
+    }
+
+    /** The tokens as a stream; closing it cancels the generation. Read it once. */
+    Stream<Token> stream() {
+        return StreamSupport.stream(this, false).onClose(this::cancel);
+    }
+
+    /** The response, once the generation ended (also after a stop); empty before, and when the generation failed. */
+    Optional<ChatResponse> result() {
+        return Optional.ofNullable(result);
+    }
+
+    /**
+     * Asks the generation to stop at its next token. Unlike {@link #cancel()} the reader sees the stream end normally,
+     * with the tokens produced so far, and the result says CANCELLED. Safe from any thread, harmless more than once.
+     */
+    void stop() {
+        if (!stopRequested.compareAndSet(false, true)) return;
+        Thread t = producer;
+        if (t != null) t.interrupt();
     }
 
     @Override
@@ -104,7 +133,11 @@ final class TokenStream implements Spliterator<Token> {
     private void produce() {
         Throwable error = null;
         try {
-            if (!cancelled.get()) run.apply(this::offer); // cancelled while starting: never generate
+            if (cancelled.get() || stopRequested.get()) { // stopped before it began: never generate
+                result = new ChatResponse("", FinishReason.CANCELLED, new Usage(0, 0, Duration.ZERO, 0));
+            } else {
+                result = run.apply(this::offer);
+            }
         } catch (Throwable t) {
             error = t;
         } finally {
@@ -116,15 +149,20 @@ final class TokenStream implements Spliterator<Token> {
         }
         Thread.interrupted(); // the flag asked us to stop; it has done its job
         End last = new End(error);
-        try {
-            while (!queue.offer(last, 100, TimeUnit.MILLISECONDS)) {
+        while (true) {
+            try {
+                if (queue.offer(last, 100, TimeUnit.MILLISECONDS)) break;
                 if (cancelled.get()) { // a full queue means the reader is not waiting; otherwise it must be woken
                     queue.offer(last);
                     break;
                 }
+            } catch (InterruptedException e) {
+                // a stop or a cancel arrived after the generation ended: the end marker must still get through
+                if (cancelled.get()) {
+                    queue.offer(last);
+                    break;
+                }
             }
-        } catch (InterruptedException e) {
-            queue.offer(last); // cancelled while waiting: wake a reader that may be blocked in take()
         }
     }
 

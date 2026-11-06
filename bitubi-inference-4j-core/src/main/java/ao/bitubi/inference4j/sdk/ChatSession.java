@@ -36,6 +36,15 @@ public interface ChatSession extends AutoCloseable {
     ChatResponse send(String userText);
 
     /**
+     * Like {@link #stream(String)} but returns a {@link Generation}: the tokens, the outcome and
+     * {@link Generation#cancel()} from any thread.
+     */
+    Generation start(String userText);
+
+    /** Like {@link #start(String)} with settings for this call only; the session's defaults are not changed. */
+    Generation start(String userText, GenerationSettings settings);
+
+    /**
      * Sends a user message and streams the answer. The session is busy from the first read until the stream is closed
      * or ends; closing it early stops the generation and the session can be used again. See {@link Bi4j#stream}.
      */

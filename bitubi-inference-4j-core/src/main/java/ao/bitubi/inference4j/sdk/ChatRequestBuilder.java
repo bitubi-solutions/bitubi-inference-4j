@@ -77,6 +77,11 @@ public final class ChatRequestBuilder {
         return new ChatRequest(messages, settings);
     }
 
+    /** Runs the request on a temporary session; see {@link Bi4j#start}. */
+    public Generation start() {
+        return bi4j.start(request());
+    }
+
     /** Runs the request on a temporary session and streams the answer; see {@link Bi4j#stream}. */
     public Stream<Token> stream() {
         return bi4j.stream(request());

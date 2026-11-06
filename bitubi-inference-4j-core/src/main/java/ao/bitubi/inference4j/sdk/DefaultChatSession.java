@@ -62,9 +62,19 @@ final class DefaultChatSession implements ChatSession {
 
     @Override
     public Stream<Token> stream(String userText) {
+        return start(userText).tokens();
+    }
+
+    @Override
+    public Generation start(String userText) {
+        return start(userText, options.defaults());
+    }
+
+    @Override
+    public Generation start(String userText, GenerationSettings settings) {
         Message message = Message.user(userText);
         checkUserMessage(message);
-        return TokenStream.open(owner, this::acquire, onToken -> turn(message, options.defaults(), onToken), this::release);
+        return new DefaultGeneration(TokenStream.create(owner, this::acquire, onToken -> turn(message, settings, onToken), this::release));
     }
 
     private void checkUserMessage(Message message) {
