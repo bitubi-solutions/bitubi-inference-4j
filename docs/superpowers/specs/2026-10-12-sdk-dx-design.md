@@ -231,3 +231,20 @@ already exist in the engine. They move under `Bi4jException`, which changes thei
    the SDK, and the migration guide and OpenRewrite recipe updated from the old API to the SDK.
 3. **Web server on the SDK** (sub-project 2, its own spec): Spring Boot 4, JTE + htmx with a ChatGPT-like UI. The
    server is the SDK's first real client, and anything it misses goes back into this spec.
+
+## 13. Gaps closed after the server design (2026-11-06)
+
+The web server's design (`2026-11-06-web-ui-design.md`, section 14) found seven things the SDK lacked. They are added to
+`ao.bitubi.inference4j.sdk` without changing what exists:
+
+| # | Gap | Addition | Semantics |
+|---|---|---|---|
+| 1 | Seed a session with history | `int ChatSession.restore(List<Message> history)` | Feeds earlier USER and ASSISTANT messages into a fresh persistent session without generating (prefill only) and records them in `history()`; returns the tokens processed. Fails with `IllegalStateException` if the session already holds anything or is temporary, `IllegalArgumentException` for a SYSTEM message (the session's own system message comes from its options), `ContextLengthExceededException` if it does not fit. The engine gets `AbstractModel.prefill(UUID, PromptContext)` for this |
+| 2 | Per-call settings | `send(String, GenerationSettings)`, `send(Message, GenerationSettings)`, `start(String, GenerationSettings)` | The call's settings replace the session defaults for that call only |
+| 3 | Outcome of a stream | `Generation`: `Stream<Token> tokens()`, `Optional<ChatResponse> result()` | `ChatSession.start(String[, GenerationSettings])` and `Bi4j.start(ChatRequest)` return a `Generation`. `result()` is empty until the generation ended; then it holds the text so far, the `FinishReason` and the `Usage`, also after a cancel. `stream(...)` stays as the short form of `start(...).tokens()` |
+| 4 | Cancel from another thread | `Generation.cancel()` | Safe from any thread, idempotent. The generation stops at its next token; the thread reading `tokens()` sees the stream end normally (not an exception) and `result()` says `CANCELLED`. `close()` still cancels and waits |
+| 5 | Context accounting | `ChatSession.contextTokens()`, `ChatSession.contextRemaining()` | Tokens the session holds in its KV cache and the room left up to the SDK `contextLength`; 0 and the full length for a temporary session |
+| 6 | Load progress | `Bi4j.Builder.onProgress(Consumer<LoadProgress>)`, `record LoadProgress(Phase phase, String detail, long done, long total)` | Phases `DOWNLOADING` (bytes), `CHECKING`, `LOADING`, `READY`, called on the thread that runs `build()` |
+| 7 | Model info | `Bi4j.info()` returning `record ModelInfo(String name, String architecture, String weightType, String memoryType, String activationType, long weightBytes, int contextLength)` | Plain strings, so no engine type leaks. `name` is the id given to the builder, or the folder or file name |
+
+Not added (the server does not need them yet): `rewind`, tool calling, batched `embed`.
