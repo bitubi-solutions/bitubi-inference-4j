@@ -469,3 +469,43 @@ tool use only after the SDK has it.
 10. **Syntax highlighting in phase 1?** Recommend no; self-hosted highlighter in a later phase, since it adds a vendored asset and a licence to track.
 11. **Browser E2E on all four CI labels, or Linux only plus a smoke on the others?** Recommend all four for the first month to learn the flake rate, then decide with `qa-bench`.
 12. **Raise `core` to bytecode 25 too?** Recommend no: the SDK is a library and 21 keeps JDK 21 applications able to use it; the CLAUDE.md "bytecode 21 until the Spring upgrade" line is rewritten to "21 for `core`, 25 for the web modules".
+
+## 18. Decisions and phase 0 results (2026-11-08)
+
+**Decisions.** The author approved this spec on 2026-11-07 and said to follow the recommendation of every open
+question in section 17. They are therefore decided: `restapi` becomes `serve` (with `restapi` as an alias for one
+release); `/v1/chat/completions` only; conversations on disk under `~/.bi4j`, `--no-history` to opt out; hand-written
+records instead of the OpenAPI generator; one `server` module; `net` moves to Boot 4 and bytecode 25; generation
+outlives the HTTP connection; at most 4 live sessions; HTTP starts before the model loads; no syntax highlighting in
+phase 1; browser E2E on all four CI labels at first; `core` stays at bytecode 21.
+
+**Phase 0 (spike).** A throw-away project outside the repository (Spring Boot 4.1.2 parent, Java 25 bytecode,
+`spring-boot-starter-webmvc`, `jte-spring-boot-starter-4` 3.2.5, `org.webjars.npm:htmx.org` 4.0.1, springdoc 3.2.0),
+driven with headless Chromium (Playwright). Results against the acceptance criteria of section 15:
+
+| | Question | Result |
+|---|---|---|
+| a | A precompiled JTE page renders from the shaded jar | **Yes, on Linux.** The jar boots in 1.4 s, class files are version 69 (Java 25), the page and the htmx webjar are served. Windows and macOS are not checked here: the phase 1 jar boot test covers them |
+| b | `hx-post` plus a `text/event-stream` response streams 200 snapshots and morphs them | **Yes.** 200 snapshots gave 200 DOM updates; the first text was visible 78 ms after the click (request included); with `hx-swap="innerMorph"` the `<p>` element is the same node at the end and the container's scroll position (30 px) is kept; no `.htmx-request` class is left behind |
+| c1 | Out-of-band swaps inside an SSE event | **Yes.** A `hx-swap-oob` element in the last event updated `#stats` (the SSE code swaps through the core swap, and a message that only has out-of-band parts does not clear the target) |
+| c2 | `HX-Retarget` / `HX-Reswap` on the stream response | **Ignored.** The extension takes the stream over before response headers are applied: the snapshots still went to the element's own `hx-target`. Do not rely on them for streams |
+| c3 | Constructable stylesheets under `style-src 'self'` | **No violation** in Chromium with `script-src 'self'; style-src 'self'; connect-src 'self'` (Firefox and WebKit not tried). The only violation seen came from an inline `style=` attribute of the test page: use a CSS file, never inline styles |
+| d | Generated OpenAPI models with Jackson 3 | **They break, silently.** The same request body, `{"model":"m","messages":[{"role":"user","content":"hi"}]}`, parses to a `ChatCompletionRequestUserMessage` with the generated Jackson 2 mapper and to `messages[0] == null` with the Jackson 3 mapper that Boot 4 puts behind `@RequestBody`: the 12 `oneOf` models use `@JsonSerialize(using=...)` with Jackson 2 `StdSerializer`s that Jackson 3 ignores, without an error. Hand-written records it is |
+| e | springdoc on Boot 4.1.2 | **Yes.** 3.2.0 serves `/v3/api-docs` (OpenAPI 3.1.0) and the Swagger UI |
+
+**What changes in the design because of the spike.**
+- Load `htmax.min.js` (the bundle: htmx 4.0.1 with the SSE, morph-related and other extensions), or `htmx.min.js` plus
+  `ext/hx-sse.min.js`. Plain `htmx.min.js` has no streaming. Unnamed events swap; named events only fire a DOM event.
+- Never abort a stream from the server. A stream that ends with an error (the connection reset) gives `htmx:sse:error`
+  ("network error") and `htmx:sse:close`, keeps the last good snapshot and leaves the page usable, but shows nothing to the
+  user. Every turn ends with a final unnamed event that carries the footer or the error alert as an out-of-band fragment,
+  and then completes normally. The named-events fallback of section 6 is not needed.
+- The Boot 4 starter is called `spring-boot-starter-webmvc`. The JTE plugin needs only this to precompile into the
+  classes directory, which the Boot jar then carries: `jte-maven-plugin` 3.2.5, goal `precompile`, phase
+  `process-classes`, `contentType` Html, `targetDirectory` `${project.build.directory}/classes`, and
+  `gg.jte.development-mode=false` plus `gg.jte.use-precompiled-templates=true` in production.
+- Maven 3.8.1 (the project's wrapper) builds a Boot 4.1.2 project; no Maven upgrade is needed.
+
+Open after the spike: Windows and macOS for (a) and the Firefox and WebKit CSP behaviour (both fall into the phase 1
+and 2 CI work), and the stop and replay behaviour, which needs the real server.
+
