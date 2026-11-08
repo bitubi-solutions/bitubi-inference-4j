@@ -34,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import tools.jackson.databind.json.JsonMapper;
 
 @RestController
 public class ChatCompletionsController {
@@ -49,10 +50,12 @@ public class ChatCompletionsController {
 
     private final ModelHost host;
     private final TurnService turns;
+    private final JsonMapper mapper;
 
-    ChatCompletionsController(ModelHost host, TurnService turns) {
+    ChatCompletionsController(ModelHost host, TurnService turns, JsonMapper mapper) {
         this.host = host;
         this.turns = turns;
+        this.mapper = mapper;
     }
 
     static Optional<UUID> sessionId(String header) {
@@ -112,7 +115,7 @@ public class ChatCompletionsController {
                 if (usage) {
                     send(emitter, new OpenAi.ChatCompletionChunk(id, "chat.completion.chunk", created, model, List.of(), OpenAiMapper.usage(r)));
                 }
-                emitter.send(SseEmitter.event().data("[DONE]"));
+                emitter.send(SseEmitter.event().data(" [DONE]"));
                 emitter.complete();
             } catch (IOException | IllegalStateException clientGone) {
                 log.debug("client left the stream: {}", clientGone.toString());
@@ -126,8 +129,9 @@ public class ChatCompletionsController {
         return emitter;
     }
 
-    private static void send(SseEmitter emitter, Object data) throws IOException {
-        emitter.send(SseEmitter.event().data(data, MediaType.APPLICATION_JSON));
+    // OpenAI writes "data: {json}" with a space; Spring writes "data:{json}" and some clients (jvm-openai) need the space.
+    private void send(SseEmitter emitter, Object data) throws IOException {
+        emitter.send(SseEmitter.event().data(" " + mapper.writeValueAsString(data)));
     }
 
     private static OpenAi.ChatCompletionChunk chunk(String id, long created, String model, OpenAi.Delta delta, String finish) {

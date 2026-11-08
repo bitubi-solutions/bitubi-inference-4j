@@ -59,7 +59,7 @@ public class ChatStreamingTest {
         HttpResponse<java.util.stream.Stream<String>> r = server.client().send(request(body), HttpResponse.BodyHandlers.ofLines());
         assertEquals(200, r.statusCode());
         List<String> data = new ArrayList<>();
-        r.body().filter(l -> l.startsWith("data:")).forEach(l -> data.add(l.substring(5).trim()));
+        r.body().filter(l -> l.startsWith("data: ")).forEach(l -> data.add(l.substring(6))); // OpenAI writes a space after "data:"
         return data;
     }
 

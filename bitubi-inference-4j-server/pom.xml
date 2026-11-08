@@ -60,6 +60,12 @@
             <version>0.10.0</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.openai</groupId>
+            <artifactId>openai-java</artifactId>
+            <version>4.101.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
