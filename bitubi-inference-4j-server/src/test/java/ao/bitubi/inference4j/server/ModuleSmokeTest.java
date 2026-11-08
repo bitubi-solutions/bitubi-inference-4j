@@ -21,7 +21,9 @@ import org.springframework.context.ConfigurableApplicationContext;
 public class ModuleSmokeTest {
     @Test
     public void theContextStartsOnAFreePort() {
-        try (ConfigurableApplicationContext ctx = new SpringApplicationBuilder(ServerApplication.class).properties("server.port=0").run()) {
+        try (ConfigurableApplicationContext ctx = new SpringApplicationBuilder(ServerApplication.class).properties("server.port=0")
+            .initializers(ServerApplication.withModelHost(ModelHost.ready(new ao.bitubi.inference4j.server.testing.FakeBi4j())))
+            .run()) {
             assertTrue(Integer.parseInt(ctx.getEnvironment().getProperty("local.server.port")) > 0);
         }
     }
