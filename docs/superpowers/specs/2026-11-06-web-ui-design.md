@@ -509,3 +509,9 @@ driven with headless Chromium (Playwright). Results against the acceptance crite
 Open after the spike: Windows and macOS for (a) and the Firefox and WebKit CSP behaviour (both fall into the phase 1
 and 2 CI work), and the stop and replay behaviour, which needs the real server.
 
+**Phase 1 delivered (2026-11-08).** Module `bitubi-inference-4j-server` (Boot 4.1.2, bytecode 25), `bi4j serve`, `/v1/chat/completions`
+(streaming and not), `/v1/models`, `/healthz`, springdoc, host and origin guards; plan `docs/superpowers/plans/2026-11-08-server-phase-1.md`.
+Found while booting the shaded jar (all fixed in the `cli` pom): logback 1.5.6 and slf4j 2.0.7 were too old for Boot 4,
+`jackson-annotations` 2.15 lacks `JsonSerializeAs`, and a transitive `commons-lang3` 3.9 lacks `Strings` (springdoc).
+The cluster coordinator no longer serves the chat API (decision D1). Not done in this phase by design: conversation store,
+UI, eviction, Anthropic, embeddings, tools.

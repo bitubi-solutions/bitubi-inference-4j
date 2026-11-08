@@ -49,7 +49,7 @@ Build and run the CLI (command `bi4j`):
 ```shell
 export JAVA_HOME=/path/to/jdk-25
 ./mvnw -B clean package -DskipTests
-./run-cli.sh restapi tjake/Llama-3.2-1B-Instruct-JQ4 --auto-download
+./run-cli.sh serve tjake/Llama-3.2-1B-Instruct-JQ4 --auto-download
 ```
 
 Open http://localhost:8080/ in your browser.
@@ -61,7 +61,7 @@ bi4j [COMMAND]
 
 Inference:
   chat                 Chat with the model
-  restapi              OpenAI-compatible REST API
+  serve                OpenAI-compatible REST API (alias: restapi)
   complete             Complete a prompt
 
 Distributed inference:

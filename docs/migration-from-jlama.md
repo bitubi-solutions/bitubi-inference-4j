@@ -25,9 +25,9 @@ Contents: [Maven](#maven-coordinates) · [Packages](#java-packages) · [Classes]
 * The SDK API: method names, signatures and behavior of `ModelSupport.loadModel`, `AbstractModel.generate`,
   `generateBuilder()`, `PromptContext`, `Downloader`, `SafeTensorSupport.maybeDownloadModel`, and so on.
   Only package and class names changed.
-* The CLI subcommands and their options: `chat`, `restapi`, `complete`, `list`, `download`, `quantize`,
-  `cluster-coordinator`, `cluster-worker`.
-* The HTTP routes (`/chat/completions`, ...) and the OpenAI-compatible payloads.
+* The CLI subcommands and their options, except `restapi` (now `serve`, see "CLI") and `cluster-coordinator` (no chat
+  API for now): `chat`, `complete`, `list`, `download`, `quantize`, `cluster-worker`.
+* The OpenAI-compatible payloads (the routes changed, see "HTTP").
 * The Hugging Face model ids (`tjake/...-JQ4`, `...-Jlama-Q4`) and `https://hf.co/tjake`: they are names of
   external repositories.
 * The Apache 2.0 license headers and the credit to the original authors.
@@ -149,6 +149,21 @@ request ends. With the header, the session keeps its KV cache across requests un
 freed on a timer. In Java, `Generator.releaseSession(UUID)` frees a session, and closing the model frees them all
 (Jlama never deleted these `.page` files, see tjake/Jlama#140).
 
+## HTTP routes
+
+| Before | After |
+|---|---|
+| `POST /chat/completions` | `POST /v1/chat/completions` (the unprefixed route is gone; official clients expect `/v1` as the base URL) |
+| (none) | `GET /v1/models`, `GET /healthz`, `GET /v3/api-docs`, Swagger UI at `/docs` |
+
+Behavior changes of `/v1/chat/completions`: streaming now ends with `data: [DONE]` and starts with a `role` chunk like
+OpenAI's; `max_completion_tokens` is honored; a request with `tools`, a non-text content part or a `tool` message is
+answered `501` (`unsupported_feature` / `unsupported_input`) instead of being ignored; `n` greater than 1 is a `400`;
+an absent `max_tokens` still means the model's context length. Errors use OpenAI's envelope
+(`{"error":{"message","type","param","code"}}`), including `session_busy` (409) and `context_length_exceeded` (400).
+With `X-Bi4j-Session`, only the messages after the last assistant message are the new turn; the earlier ones are used
+only when the server has no such session yet (after a restart), to rebuild it.
+
 ## gRPC
 
 The protobuf package and service names changed, so **a Jlama worker cannot talk to a bitubi-inference-4j
@@ -169,8 +184,20 @@ coordinator, or the other way round**. Upgrade a whole cluster at once.
 | `jlama-cli/target/jlama-cli.jar` | `bitubi-inference-4j-cli/target/bitubi-inference-4j-cli.jar` |
 | `./run-cli.sh` (reads `JLAMA_*`) | `./run-cli.sh` (reads `BI4J_*`) |
 
-The subcommands and their options are the same (`chat`, `restapi`, `complete`, `list`, `download`, `quantize`,
-`cluster-coordinator`, `cluster-worker`).
+The subcommands and their options are the same (`chat`, `complete`, `list`, `download`, `quantize`, `cluster-worker`),
+with these changes:
+
+* **`restapi` is now `serve`** (`restapi` still works as an alias for one release). It listens **before** the model
+  loads: the URL prints at once, `/healthz` is 503 until the model is ready, `/v1/chat/completions` answers 503
+  `model_loading` with `Retry-After: 5`, and a failed model keeps the server up with the reason in `/healthz`.
+  Scripts that waited for the port must wait for `GET /healthz` = 200.
+* `serve` binds `127.0.0.1` by default (`--host` to change; anything else prints a no-authentication warning and
+  needs `--allowed-host <name>` for the names clients use). Requests whose `Host` is not loopback or allowed get 421,
+  and cross-site `POST`s get 403.
+* `serve` uses the SDK's automatic working types. `--working-dtype` and `--working-qtype` are manual overrides and
+  must be given together. `--context-length` is new.
+* **`cluster-coordinator` keeps gRPC and `/cluster/topology` but no longer serves the chat API**: the SDK does not
+  drive a distributed model yet. It returns with the cluster sub-project.
 
 ## Deployment artifacts
 
@@ -295,7 +322,7 @@ JLAMA_JVM_ARGS_EXTRA="-Xmx8g -Djlama.use_native_tensor_operations=true -Djlama.d
 
 # after
 BI4J_JVM_ARGS_EXTRA="-Xmx8g -Dbi4j.backend=native -Dbi4j.debug=true" \
-  ./run-cli.sh restapi tjake/Llama-3.2-1B-Instruct-JQ4 --auto-download
+  ./run-cli.sh serve tjake/Llama-3.2-1B-Instruct-JQ4 --auto-download
 # (drop -Dbi4j.backend=native to get the default, Panama)
 ```
 

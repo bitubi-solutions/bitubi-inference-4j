@@ -14,8 +14,8 @@ Spec e plano: `docs/superpowers/specs/` e `docs/superpowers/plans/`. Ordem dos s
   commits ou PRs.
 - Idioma: **CLI e documentação em inglês** (decisão do autor, 2026-10-18; docs antigos em português estão a ser traduzidos). Conversa com o autor em português europeu.
 - **Sem retrocompatibilidade com o Jlama** (decisão do autor, 2026-10-18): contratos legados (`jlama.*`, `JLAMA_*`, `X-Jlama-Session`, `use_native_tensor_operations`) são removidos; a migração de quem usa o SDK do Jlama é facilitada por guia e receita OpenRewrite, e o SDK deve ficar preparado para integração com o LangChain4j (desenho só depois da revisão de DX do SDK).
-- JDK 25 é o mínimo e único alvo de build, teste e execução. Bytecode fica em 21 até o upgrade do
-  Spring (o Spring Boot 3.3 não lê classes versão 69).
+- JDK 25 é o mínimo e único alvo de build, teste e execução. Bytecode: 21 no `core` (o SDK é uma
+  biblioteca para apps em JDK 21+), 25 nos módulos `server`, `net` e `cli` (Spring Boot 4).
 - **Panama (Vector API) é a implementação padrão.** O backend se escolhe com `-Dbi4j.backend=auto|panama|native`
   (ver `docs/backends.md`). O nativo nunca é escolhido sozinho. É compilado por ISA com
   seleção em tempo de execução (`-Dbi4j.native.isa`); numa CPU abaixo do piso cai em Panama com um aviso no log.
