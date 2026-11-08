@@ -14,7 +14,29 @@
 
   <properties>
     <resteasy.version>3.15.6.Final</resteasy.version>
+    <!-- Spring Boot 4.1.2 needs these (its logging setup calls LoggerContext.getConfigurationLock, new in logback 1.5.x) -->
+    <logback.version>1.5.38</logback.version>
+    <slf4j-api.version>2.0.20</slf4j-api.version>
   </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- Jackson 3 (Spring Boot 4) needs jackson-annotations 2.21; core pins databind 2.15, so align the 2.x line here -->
+      <dependency>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>2.21.7</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <!-- springdoc needs org.apache.commons.lang3.Strings (3.18+); a transitive dependency of core brings 3.9 -->
+      <dependency>
+        <groupId>org.apache.commons</groupId>
+        <artifactId>commons-lang3</artifactId>
+        <version>3.19.0</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <dependencies>
     <dependency>
