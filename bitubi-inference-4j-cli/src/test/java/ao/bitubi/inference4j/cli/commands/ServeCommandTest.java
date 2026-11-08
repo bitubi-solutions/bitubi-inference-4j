@@ -53,4 +53,12 @@ public class ServeCommandTest {
         assertFalse(ServeCommand.isLoopback("0.0.0.0"));
         assertFalse(ServeCommand.isLoopback("192.168.1.5"));
     }
+
+    @Test
+    public void theBannerNeverShowsAWildcardAddress() {
+        assertEquals("localhost", ServeCommand.displayHost("0.0.0.0"));
+        assertEquals("localhost", ServeCommand.displayHost("::"));
+        assertEquals("127.0.0.1", ServeCommand.displayHost("127.0.0.1"));
+        assertEquals("[::1]", ServeCommand.displayHost("::1"));
+    }
 }

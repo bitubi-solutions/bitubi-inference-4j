@@ -65,6 +65,9 @@ public final class OpenAiMapper {
         if (c instanceof List<?> parts) {
             StringBuilder sb = new StringBuilder();
             for (Object p : parts) {
+                if (p instanceof Map<?, ?> tp && "text".equals(tp.get("type")) && !(tp.get("text") instanceof String)) {
+                    throw new IllegalArgumentException("a text content part needs a text string");
+                }
                 if (!(p instanceof Map<?, ?> part) || !"text".equals(part.get("type")) || !(part.get("text") instanceof String t)) {
                     String type = p instanceof Map<?, ?> pm ? String.valueOf(pm.get("type")) : "?";
                     throw new UnsupportedRequestException("unsupported_input", "content parts of type '" + type + "' are not supported, only text");
@@ -84,7 +87,10 @@ public final class OpenAiMapper {
         s = s.withMaxNewTokens(max != null ? max : contextLength);
         if (r.temperature() != null) s = s.withTemperature(r.temperature());
         if (r.stop() instanceof String one) s = s.withStop(List.of(one));
-        else if (r.stop() instanceof List<?> many) s = s.withStop(many.stream().map(String::valueOf).toList());
+        else if (r.stop() instanceof List<?> many) {
+            if (many.stream().anyMatch(x -> !(x instanceof String))) throw new IllegalArgumentException("stop must be a string or a list of strings");
+            s = s.withStop(many.stream().map(String::valueOf).toList());
+        }
         return s;
     }
 

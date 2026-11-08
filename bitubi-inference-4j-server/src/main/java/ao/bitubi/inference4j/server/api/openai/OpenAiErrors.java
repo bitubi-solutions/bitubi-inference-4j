@@ -24,11 +24,13 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 /** Every error leaves as the OpenAI envelope {@code {"error":{message,type,param,code}}}, never a stack trace. */
-@RestControllerAdvice(basePackageClasses = ChatCompletionsController.class)
+@RestControllerAdvice
 public class OpenAiErrors {
     private static final Logger log = LoggerFactory.getLogger(OpenAiErrors.class);
 
@@ -85,6 +87,16 @@ public class OpenAiErrors {
     ResponseEntity<OpenAi.ErrorBody> engine(Bi4jException e) {
         log.warn("engine error", e);
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "server_error", "engine_error", null, e.getMessage());
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    ResponseEntity<OpenAi.ErrorBody> method(HttpRequestMethodNotSupportedException e) {
+        return error(HttpStatus.METHOD_NOT_ALLOWED, "invalid_request_error", "method_not_allowed", null, e.getMessage());
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    ResponseEntity<OpenAi.ErrorBody> mediaType(HttpMediaTypeNotSupportedException e) {
+        return error(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "invalid_request_error", "unsupported_media_type", null, "send the body as application/json");
     }
 
     /** Last resort, so that an unexpected failure still leaves in OpenAI's envelope and without a stack trace. */

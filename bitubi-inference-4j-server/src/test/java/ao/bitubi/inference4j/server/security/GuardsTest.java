@@ -105,4 +105,16 @@ public class GuardsTest {
     public void getRequestsAreNotOriginChecked() throws Exception {
         assertEquals(200, raw("GET", "/healthz", null, "Host: 127.0.0.1:" + server.port(), "Origin: http://evil.example"));
     }
+
+    @Test
+    public void anAllowedHostGivenWithAPortStillMatches() throws Exception {
+        try (TestServer s = TestServer.start(ModelHost.ready(new FakeBi4j()), "bi4j.server.allowed-hosts=other.lan:9000")) {
+            try (Socket sock = new Socket("127.0.0.1", s.port())) {
+                sock.getOutputStream().write("GET /healthz HTTP/1.1\r\nHost: other.lan:9000\r\nConnection: close\r\n\r\n".getBytes(StandardCharsets.UTF_8));
+                sock.getOutputStream().flush();
+                String reply = new String(sock.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+                assertTrue(reply.startsWith("HTTP/1.1 200"), reply);
+            }
+        }
+    }
 }

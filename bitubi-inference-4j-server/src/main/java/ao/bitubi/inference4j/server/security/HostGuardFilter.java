@@ -37,7 +37,7 @@ public class HostGuardFilter extends OncePerRequestFilter {
     private final Set<String> allowed = new HashSet<>(Set.of("localhost", "127.0.0.1", "[::1]"));
 
     public HostGuardFilter(Bi4jServerProperties properties) {
-        properties.allowedHosts().forEach(h -> allowed.add(h.toLowerCase(Locale.ROOT)));
+        properties.allowedHosts().forEach(h -> allowed.add(hostName(h)));
     }
 
     static String hostName(String header) {

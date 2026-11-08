@@ -35,6 +35,7 @@ public final class TurnService {
     private final ModelHost host;
     private final SessionRegistry sessions;
     private final Set<UUID> active = ConcurrentHashMap.newKeySet();
+    private final Set<Turn> live = ConcurrentHashMap.newKeySet();
 
     public TurnService(ModelHost host, SessionRegistry sessions) {
         this.host = host;
@@ -45,7 +46,7 @@ public final class TurnService {
         Bi4j bi4j = host.require();
         if (sessionId.isEmpty()) {
             UUID id = UUID.randomUUID();
-            return new Turn(id, bi4j.start(new ChatRequest(messages, settings)), () -> {});
+            return track(id, bi4j.start(new ChatRequest(messages, settings)), () -> {});
         }
         UUID id = sessionId.get();
         if (!active.add(id)) throw new SessionBusyException(id);
@@ -67,12 +68,52 @@ public final class TurnService {
                 turn.add(m.text());
             }
             if (turn.isEmpty()) throw new IllegalArgumentException("the last messages must come from the user");
+            // The client is the source of truth when it resends history: if it differs from what the session holds
+            // (an edit, or a trim after a context error), rebuild the session from it.
+            if (!earlier.isEmpty()) {
+                sessions.find(id).ifPresent(existing -> {
+                    if (!sameHistory(existing.history(), earlier)) sessions.remove(id);
+                });
+            }
             ChatSession session = sessions.getOrCreate(id, bi4j, system, earlier);
             Generation g = session.start(String.join("\n\n", turn), settings);
-            return new Turn(id, g, () -> active.remove(id));
+            return track(id, g, () -> active.remove(id));
         } catch (RuntimeException e) {
             active.remove(id);
             throw e;
+        }
+    }
+
+    private Turn track(UUID id, Generation g, Runnable release) {
+        Turn[] box = new Turn[1];
+        Turn t = new Turn(id, g, () -> {
+            live.remove(box[0]);
+            release.run();
+        });
+        box[0] = t;
+        live.add(t);
+        return t;
+    }
+
+    private static boolean sameHistory(List<Message> held, List<Message> sent) {
+        if (held.size() != sent.size()) return false;
+        for (int i = 0; i < held.size(); i++) {
+            if (held.get(i).role() != sent.get(i).role() || !held.get(i).text().trim().equals(sent.get(i).text().trim())) return false;
+        }
+        return true;
+    }
+
+    /** Cancels every running turn and waits briefly for them to let go, so shutdown does not close sessions under them. */
+    public void cancelAll() {
+        live.forEach(Turn::cancel);
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+        while (!live.isEmpty() && System.nanoTime() < deadline) {
+            try {
+                Thread.sleep(20);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
         }
     }
 }

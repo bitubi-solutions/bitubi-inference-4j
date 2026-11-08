@@ -22,7 +22,7 @@ public class ServerBeans {
         return new SessionRegistry();
     }
 
-    @Bean
+    @Bean(destroyMethod = "cancelAll")
     TurnService turnService(ModelHost host, SessionRegistry sessions) {
         return new TurnService(host, sessions);
     }

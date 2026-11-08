@@ -155,4 +155,43 @@ public class TurnServiceTest {
             restoring.join();
         }
     }
+
+    @Test
+    public void aClientThatEditsItsHistoryGetsTheSessionRebuiltFromIt() {
+        UUID id = UUID.randomUUID();
+        run(id, List.of(Message.user("one")));
+        run(id, List.of(Message.user("ONE EDITED"), Message.assistant("Hello"), Message.user("two")));
+        List<Message> h = sessions.find(id).orElseThrow().history();
+        assertEquals("ONE EDITED", h.get(0).text());
+        assertEquals(4, h.size());
+    }
+
+    @Test
+    public void aTrimmedHistoryAfterAContextErrorRecoversUnderTheSameId() {
+        UUID id = UUID.randomUUID();
+        run(id, List.of(Message.user("one")));
+        run(id, List.of(Message.user("three"))); // the client dropped the first exchange
+        assertEquals("three", sessions.find(id).orElseThrow().history().get(2).text());
+        run(id, List.of(Message.user("x"), Message.assistant("y"), Message.user("z")));
+        assertEquals("x", sessions.find(id).orElseThrow().history().get(0).text());
+    }
+
+    @Test
+    public void cancelAllEndsRunningTurnsAndFreesTheirSessions() throws Exception {
+        fake.script("a", "b", "c", "d", "e", "f", "g", "h", "i", "j").delayMs(100);
+        UUID id = UUID.randomUUID();
+        Turn t = service.start(Optional.of(id), List.of(Message.user("x")), GenerationSettings.defaults());
+        Thread reader = Thread.ofVirtual().start(() -> {
+            try (t) {
+                drain(t);
+            }
+        });
+        Thread.sleep(150);
+        service.cancelAll();
+        reader.join(5000);
+        assertFalse(reader.isAlive());
+        assertEquals(1, fake.cancelCount());
+        fake.script("ok").delayMs(0);
+        run(id, List.of(Message.user("again")));
+    }
 }

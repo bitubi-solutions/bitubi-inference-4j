@@ -115,15 +115,21 @@ public class ChatCompletionsController {
                 if (usage) {
                     send(emitter, new OpenAi.ChatCompletionChunk(id, "chat.completion.chunk", created, model, List.of(), OpenAiMapper.usage(r)));
                 }
-                emitter.send(SseEmitter.event().data(" [DONE]"));
+                sendRaw(emitter, " [DONE]");
                 emitter.complete();
-            } catch (IOException | IllegalStateException clientGone) {
+            } catch (IOException clientGone) {
                 log.debug("client left the stream: {}", clientGone.toString());
                 turn.cancel(); // the API cancels when the client leaves
                 emitter.completeWithError(clientGone);
             } catch (RuntimeException e) {
                 log.warn("stream failed after the first token", e);
-                emitter.completeWithError(e);
+                try {
+                    // OpenAI sends the error as an event; the HTTP status is already committed
+                    send(emitter, new OpenAi.ErrorBody(new OpenAi.ErrorDetail("generation failed: " + e.getMessage(), "server_error", null, "engine_error")));
+                } catch (IOException gone) {
+                    // nobody left to tell
+                }
+                emitter.complete();
             }
         });
         return emitter;
@@ -131,7 +137,16 @@ public class ChatCompletionsController {
 
     // OpenAI writes "data: {json}" with a space; Spring writes "data:{json}" and some clients (jvm-openai) need the space.
     private void send(SseEmitter emitter, Object data) throws IOException {
-        emitter.send(SseEmitter.event().data(" " + mapper.writeValueAsString(data)));
+        sendRaw(emitter, " " + mapper.writeValueAsString(data));
+    }
+
+    /** A send on a completed emitter throws IllegalStateException; to the caller that is the client having left. */
+    private static void sendRaw(SseEmitter emitter, String data) throws IOException {
+        try {
+            emitter.send(SseEmitter.event().data(data));
+        } catch (IllegalStateException e) {
+            throw new IOException("the stream is closed", e);
+        }
     }
 
     private static OpenAi.ChatCompletionChunk chunk(String id, long created, String model, OpenAi.Delta delta, String finish) {

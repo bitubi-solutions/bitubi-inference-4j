@@ -69,6 +69,12 @@ public class ServeCommand extends SimpleBaseCommand {
         }
     }
 
+    /** The name to show in URLs: a wildcard bind address is not something a browser can open. */
+    static String displayHost(String host) {
+        if (host.equals("0.0.0.0") || host.equals("::") || host.equals("[::]")) return "localhost";
+        return host.contains(":") && !host.startsWith("[") ? "[" + host + "]" : host;
+    }
+
     static boolean isLoopback(String host) {
         return host.equals("localhost") || host.equals("::1") || host.equals("[::1]") || host.startsWith("127.");
     }
@@ -104,7 +110,7 @@ public class ServeCommand extends SimpleBaseCommand {
                     "logging.level.org.springframework.web=info"
                 )
                 .listeners((ApplicationReadyEvent e) -> {
-                    String base = "http://" + (host.contains(":") ? "[" + host + "]" : host) + ":" + e.getApplicationContext().getEnvironment().getProperty("local.server.port");
+                    String base = "http://" + displayHost(host) + ":" + e.getApplicationContext().getEnvironment().getProperty("local.server.port");
                     System.out.println("OpenAI API: " + base + "/v1");
                     System.out.println("API docs:   " + base + "/docs");
                     System.out.println("Model:      " + modelName + " (loading; " + base + "/healthz tells when it is ready)");

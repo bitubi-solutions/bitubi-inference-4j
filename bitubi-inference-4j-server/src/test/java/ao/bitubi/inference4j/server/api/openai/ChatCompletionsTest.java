@@ -188,4 +188,27 @@ public class ChatCompletionsTest {
         assertEquals("server_error", json(r).at("/error/type").asString());
         assertFalse(r.body().contains("at ao."));
     }
+
+    @Test
+    public void wrongMethodAndMediaTypeAreOpenAiShaped() throws Exception {
+        var get = server.get("/v1/chat/completions");
+        assertEquals(405, get.statusCode());
+        assertEquals("method_not_allowed", json(get).at("/error/code").asString());
+        var req = java.net.http.HttpRequest.newBuilder(server.uri("/v1/chat/completions"))
+            .header("Content-Type", "text/plain")
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString("hi"))
+            .build();
+        var text = server.client().send(req, java.net.http.HttpResponse.BodyHandlers.ofString());
+        assertEquals(415, text.statusCode());
+        assertEquals("unsupported_media_type", json(text).at("/error/code").asString());
+    }
+
+    @Test
+    public void aNullStopAndATextPartWithoutTextAreCleanErrors() throws Exception {
+        var stop = server.post("/v1/chat/completions", "{\"messages\":[{\"role\":\"user\",\"content\":\"x\"}],\"stop\":[\"a\",null]}");
+        assertEquals(400, stop.statusCode());
+        var part = server.post("/v1/chat/completions", "{\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\"}]}]}");
+        assertEquals(400, part.statusCode());
+        assertEquals("invalid_request", json(part).at("/error/code").asString());
+    }
 }

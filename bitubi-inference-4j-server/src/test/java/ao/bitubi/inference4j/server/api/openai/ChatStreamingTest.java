@@ -129,4 +129,14 @@ public class ChatStreamingTest {
         sse(ChatCompletionsTest.body(true, "hi"));
         await(() -> fake.liveSessions() == 0);
     }
+
+    @Test
+    public void anEngineErrorAfterTheFirstTokenIsAnErrorEventAndAnOrderlyEnd() throws Exception {
+        fake.script("a", "b", "c", "d").failAt(2, new IllegalStateException("boom"));
+        List<String> data = sse(ChatCompletionsTest.body(true, "hi"));
+        String last = data.get(data.size() - 1);
+        assertTrue(last.contains("\"error\""), last);
+        assertTrue(last.contains("engine_error"), last);
+        assertFalse(data.contains("[DONE]"));
+    }
 }
