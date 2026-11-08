@@ -21,11 +21,8 @@ import org.junit.jupiter.api.Test;
 
 public class PrecompiledTemplatesTest {
     @Test
-    public void aPrecompiledTemplateRendersAndTheHtmxBundleIsServed() throws Exception {
+    public void theHtmxBundleIsServed() throws Exception {
         try (TestServer s = TestServer.start(ModelHost.ready(new FakeBi4j()))) {
-            var page = s.get("/hello");
-            assertEquals(200, page.statusCode(), page.body());
-            assertTrue(page.body().contains("<p>Hello bi4j</p>"), page.body());
             var js = s.get("/webjars/htmx.org/4.0.1/dist/htmax.min.js");
             assertEquals(200, js.statusCode());
             assertTrue(js.body().length() > 10_000);

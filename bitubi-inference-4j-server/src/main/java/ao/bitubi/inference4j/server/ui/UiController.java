@@ -13,14 +13,6 @@
 package ao.bitubi.inference4j.server.ui;
 
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.GetMapping;
 
 @Controller
-public class UiController {
-    @GetMapping("/hello")
-    String hello(Model model) {
-        model.addAttribute("name", "bi4j");
-        return "hello";
-    }
-}
+public class UiController {}
