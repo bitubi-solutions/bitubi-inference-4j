@@ -10,7 +10,7 @@
 @param boolean contextWarn
 @template.answerBody(html = html, footer = footer)
 @if(error != null)<div class="alert" role="alert"><p>${error}</p></div>@endif
-@template.composerActions(conversationId = conversationId, turnId = null, disabled = false)
+@template.composerActions(oob = true, conversationId = conversationId, turnId = null, disabled = false)
 <div id="conversation-list" hx-swap-oob="true">@template.sidebarList(groups = groups, query = "")</div>
 <span id="context-counter" class="${contextWarn ? "warn" : ""}" hx-swap-oob="true">${contextLabel}</span>
 <div id="status-live" class="visually-hidden" role="status" hx-swap-oob="true">${error == null ? "Answer complete" : "Answer failed"}</div>

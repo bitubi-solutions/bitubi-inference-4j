@@ -13,6 +13,7 @@
     <name>bitubi-inference-4j Server</name>
 
     <properties>
+        <e2e.testExclude>**/e2e/**</e2e.testExclude>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <spring-boot.version>4.1.2</spring-boot.version>
         <springdoc.version>3.2.0</springdoc.version>
@@ -96,6 +97,36 @@
         </dependency>
     </dependencies>
 
+        <profiles>
+        <!-- Browser tests: they need Chromium (Playwright downloads it) and take a while, so they are opt-in: -Pe2e -->
+        <profile>
+            <id>e2e</id>
+            <properties>
+                <e2e.testExclude>none</e2e.testExclude>
+            </properties>
+            <dependencies>
+                <dependency>
+                    <groupId>com.microsoft.playwright</groupId>
+                    <artifactId>playwright</artifactId>
+                    <version>1.64.0</version>
+                    <scope>test</scope>
+                </dependency>
+            </dependencies>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/e2e/*E2E.java</include>
+                            </includes>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
     <build>
         <plugins>
             <plugin>
@@ -122,6 +153,9 @@
                     <source>25</source>
                     <target>25</target>
                     <parameters>true</parameters>
+                    <testExcludes>
+                        <testExclude>${e2e.testExclude}</testExclude>
+                    </testExcludes>
                 </configuration>
             </plugin>
         </plugins>
