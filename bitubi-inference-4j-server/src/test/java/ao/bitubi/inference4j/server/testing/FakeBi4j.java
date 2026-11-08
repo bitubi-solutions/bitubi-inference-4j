@@ -275,11 +275,7 @@ public final class FakeBi4j implements Bi4j {
                 @Override
                 public Token next() {
                     if (!hasNext()) throw new NoSuchElementException();
-                    sleep(delayMs);
-                    if (cancelled.get()) {
-                        finish();
-                        throw new NoSuchElementException();
-                    }
+                    sleep(delayMs); // a cancel during the wait still delivers this token: the stream ends at the next hasNext
                     if (i == failIndex) {
                         fail();
                         throw failure;
