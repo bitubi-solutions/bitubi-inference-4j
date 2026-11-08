@@ -53,7 +53,8 @@ public class JarBootTest {
             "serve",
             "/nonexistent-model",
             "--port",
-            String.valueOf(port)
+            String.valueOf(port),
+            "--no-history"
         ).redirectErrorStream(true).redirectOutput(log.toFile()).start();
         try {
             HttpClient client = HttpClient.newHttpClient();
@@ -77,6 +78,14 @@ public class JarBootTest {
             assertTrue(models.body().contains("\"data\":[]"), models.body());
             HttpResponse<String> docs = get(client, port, "/v3/api-docs");
             assertEquals(200, docs.statusCode(), docs.body() + "\n" + Files.readString(log));
+            // the chat UI: the failed-model panel explains itself, assets are served, the old UI is gone
+            HttpResponse<String> page = get(client, port, "/");
+            assertEquals(200, page.statusCode(), page.body());
+            assertTrue(page.body().contains("model-status"), page.body());
+            assertTrue(page.headers().firstValue("Content-Security-Policy").orElse("").contains("script-src 'self'"));
+            assertEquals(200, get(client, port, "/webjars/htmx.org/4.0.1/dist/htmax.min.js").statusCode());
+            assertEquals(200, get(client, port, "/app.js").statusCode());
+            assertEquals(404, get(client, port, "/ui/index.html").statusCode());
             assertTrue(p.isAlive());
         } finally {
             p.destroy();

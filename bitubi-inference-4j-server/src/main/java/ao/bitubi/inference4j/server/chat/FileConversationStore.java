@@ -135,7 +135,7 @@ public final class FileConversationStore implements ConversationStore {
         Path target = file(c.id());
         Path tmp = dir.resolve(c.id() + ".json.tmp");
         try {
-            Files.createDirectories(dir);
+            ensureDirectory(dir);
             Files.writeString(tmp, mapper.writeValueAsString(c), StandardCharsets.UTF_8);
             moveWithRetry(tmp, target);
             error.set(null);
@@ -147,6 +147,24 @@ public final class FileConversationStore implements ConversationStore {
             } catch (IOException ignored) {
                 // nothing more to do
             }
+        }
+    }
+
+    /** Creates the conversations directory (and its parent); new directories are private to the user where the OS allows it. */
+    private static void ensureDirectory(Path d) throws IOException {
+        if (Files.isDirectory(d)) return;
+        Path parent = d.getParent();
+        boolean parentNew = parent != null && !Files.isDirectory(parent);
+        Files.createDirectories(d);
+        restrict(d);
+        if (parentNew) restrict(parent);
+    }
+
+    private static void restrict(Path d) {
+        try {
+            Files.setPosixFilePermissions(d, java.nio.file.attribute.PosixFilePermissions.fromString("rwx------"));
+        } catch (UnsupportedOperationException | IOException e) {
+            // not a POSIX file system (Windows): the profile directory is already private
         }
     }
 

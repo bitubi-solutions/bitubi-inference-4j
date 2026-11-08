@@ -61,4 +61,18 @@ public class ServeCommandTest {
         assertEquals("127.0.0.1", ServeCommand.displayHost("127.0.0.1"));
         assertEquals("[::1]", ServeCommand.displayHost("::1"));
     }
+
+    @Test
+    public void historyOptionsParse() {
+        ServeCommand c = new ServeCommand();
+        new CommandLine(c).parseArgs("m/n", "--data-dir", "/tmp/bi4j-data", "--no-history", "--open");
+        assertTrue(c.noHistory);
+        assertTrue(c.open);
+        assertEquals(new java.io.File("/tmp/bi4j-data"), c.dataDir);
+        ServeCommand d = new ServeCommand();
+        new CommandLine(d).parseArgs("m/n");
+        assertFalse(d.noHistory);
+        assertFalse(d.open);
+        assertNull(d.dataDir);
+    }
 }

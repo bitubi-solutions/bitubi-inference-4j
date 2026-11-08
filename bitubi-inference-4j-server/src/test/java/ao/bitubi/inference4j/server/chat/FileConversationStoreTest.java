@@ -132,4 +132,13 @@ public class FileConversationStoreTest {
         store.save(sample(UUID.randomUUID()));
         assertFalse(store.writable());
     }
+
+    @Test
+    void newDirectoriesArePrivateToTheUser() throws Exception {
+        Assumptions.assumeTrue(java.nio.file.FileSystems.getDefault().supportedFileAttributeViews().contains("posix"));
+        Path data = dir.resolve("fresh");
+        new FileConversationStore(data).save(sample(UUID.randomUUID()));
+        assertEquals("rwx------", java.nio.file.attribute.PosixFilePermissions.toString(Files.getPosixFilePermissions(data)));
+        assertEquals("rwx------", java.nio.file.attribute.PosixFilePermissions.toString(Files.getPosixFilePermissions(data.resolve("conversations"))));
+    }
 }

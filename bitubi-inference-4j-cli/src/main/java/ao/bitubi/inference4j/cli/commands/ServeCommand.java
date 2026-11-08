@@ -24,9 +24,6 @@ import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import picocli.CommandLine;
 
 @CommandLine.Command(name = "serve", aliases = {
@@ -49,6 +46,15 @@ public class ServeCommand extends SimpleBaseCommand {
     @CommandLine.Option(names = { "--threads" }, paramLabel = "ARG", description = "Threads for the math (default: physical cores)")
     Integer threads;
 
+    @CommandLine.Option(names = { "--data-dir" }, paramLabel = "ARG", description = "Where conversations are stored, as plain text (default: ~/.bi4j)")
+    java.io.File dataDir;
+
+    @CommandLine.Option(names = { "--no-history" }, description = "Keep conversations in memory only; nothing is written to disk")
+    boolean noHistory;
+
+    @CommandLine.Option(names = { "--open" }, description = "Open the chat in the default browser once the server is up")
+    boolean open;
+
     @CommandLine.ArgGroup(exclusive = false, heading = "Manual working types (at your own risk; default is automatic):%n")
     WorkingTypes workingTypes;
 
@@ -60,19 +66,22 @@ public class ServeCommand extends SimpleBaseCommand {
         DType activations;
     }
 
-    /** Serves the static chat page that ships with the CLI until the new UI replaces it. */
-    @Configuration
-    static class StaticUi implements WebMvcConfigurer {
-        @Override
-        public void addResourceHandlers(ResourceHandlerRegistry registry) {
-            registry.addResourceHandler("/ui/**").addResourceLocations("classpath:/static/ui/");
-        }
-    }
-
     /** The name to show in URLs: a wildcard bind address is not something a browser can open. */
     static String displayHost(String host) {
         if (host.equals("0.0.0.0") || host.equals("::") || host.equals("[::]")) return "localhost";
         return host.contains(":") && !host.startsWith("[") ? "[" + host + "]" : host;
+    }
+
+    private static void openBrowser(String url) {
+        try {
+            if (java.awt.Desktop.isDesktopSupported() && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.BROWSE)) {
+                java.awt.Desktop.getDesktop().browse(java.net.URI.create(url));
+                return;
+            }
+        } catch (Exception ignored) {
+            // fall through: the URL is printed above
+        }
+        System.out.println("Could not open a browser here; open " + url + " yourself.");
     }
 
     static boolean isLoopback(String host) {
@@ -102,19 +111,23 @@ public class ServeCommand extends SimpleBaseCommand {
                 );
             }
             ModelHost modelHost = new ModelHost(this::load);
-            new SpringApplicationBuilder(ServerApplication.class, StaticUi.class).initializers(ServerApplication.withModelHost(modelHost))
+            new SpringApplicationBuilder(ServerApplication.class).initializers(ServerApplication.withModelHost(modelHost))
                 .properties(
                     "server.address=" + host,
                     "server.port=" + port,
                     "bi4j.server.allowed-hosts=" + String.join(",", allowedHosts),
+                    "bi4j.server.history=" + !noHistory,
+                    "bi4j.server.data-dir=" + (dataDir == null ? "" : dataDir.getAbsolutePath()),
                     "logging.level.org.springframework.web=info"
                 )
                 .listeners((ApplicationReadyEvent e) -> {
                     String base = "http://" + displayHost(host) + ":" + e.getApplicationContext().getEnvironment().getProperty("local.server.port");
+                    System.out.println("Chat UI:    " + base);
                     System.out.println("OpenAI API: " + base + "/v1");
                     System.out.println("API docs:   " + base + "/docs");
                     System.out.println("Model:      " + modelName + " (loading; " + base + "/healthz tells when it is ready)");
                     modelHost.start();
+                    if (open) openBrowser(base);
                 })
                 .run();
         } catch (Exception e) {
