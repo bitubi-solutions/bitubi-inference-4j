@@ -111,6 +111,7 @@ public class ChatCompletionsTest {
     public void tenSimultaneousRequestsOnOneSessionGiveOneSuccess() throws Exception {
         fake.script("a", "b").delayMs(200);
         String id = UUID.randomUUID().toString();
+        var pool = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor(); // the common pool may have 1 thread on small runners
         List<CompletableFuture<Integer>> calls = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             calls.add(CompletableFuture.supplyAsync(() -> {
@@ -119,7 +120,7 @@ public class ChatCompletionsTest {
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
-            }));
+            }, pool));
         }
         long ok = 0;
         long busy = 0;
@@ -169,6 +170,22 @@ public class ChatCompletionsTest {
         var r = server.post("/v1/chat/completions", body(false, "hi"));
         assertEquals(500, r.statusCode());
         assertEquals("engine_error", json(r).at("/error/code").asString());
+        assertFalse(r.body().contains("at ao."));
+    }
+
+    @Test
+    public void aNullMessageIs400NotAnNpe() throws Exception {
+        var r = server.post("/v1/chat/completions", "{\"messages\":[null]}");
+        assertEquals(400, r.statusCode());
+        assertEquals("invalid_request", json(r).at("/error/code").asString());
+    }
+
+    @Test
+    public void anUnexpectedExceptionIsAnOpenAiShaped500() throws Exception {
+        fake.failAt(0, new IllegalStateException("boom"));
+        var r = server.post("/v1/chat/completions", body(false, "hi"));
+        assertEquals(500, r.statusCode());
+        assertEquals("server_error", json(r).at("/error/type").asString());
         assertFalse(r.body().contains("at ao."));
     }
 }

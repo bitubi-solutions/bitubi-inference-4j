@@ -46,6 +46,7 @@ public final class OpenAiMapper {
         if (r.messages() == null || r.messages().isEmpty()) throw new IllegalArgumentException("messages must not be empty");
         List<Message> out = new ArrayList<>();
         for (OpenAi.ChatMessage m : r.messages()) {
+            if (m == null) throw new IllegalArgumentException("messages must not contain null");
             String text = text(m);
             String role = m.role() == null ? "" : m.role();
             switch (role) {

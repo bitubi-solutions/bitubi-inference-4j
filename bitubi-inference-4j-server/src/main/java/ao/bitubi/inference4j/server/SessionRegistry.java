@@ -28,22 +28,27 @@ public final class SessionRegistry {
     private static final Logger log = LoggerFactory.getLogger(SessionRegistry.class);
     private final Map<UUID, ChatSession> sessions = new ConcurrentHashMap<>();
 
-    /** The session for {@code id}; a new one is seeded with {@code system} and {@code earlier} (prefill only). */
+    /**
+     * The session for {@code id}; a new one is seeded with {@code system} and {@code earlier} (prefill only). The
+     * prefill runs outside the map (it can take minutes): callers hold the id through {@code TurnService}, so two
+     * threads never create the same id at once.
+     */
     public ChatSession getOrCreate(UUID id, Bi4j bi4j, String system, List<Message> earlier) {
-        return sessions.computeIfAbsent(id, k -> {
-            ChatSession s = bi4j.newSession(o -> {
-                if (system != null) o.system(system);
-            });
-            if (!earlier.isEmpty()) {
-                try {
-                    s.restore(earlier);
-                } catch (RuntimeException e) {
-                    s.close();
-                    throw e;
-                }
-            }
-            return s;
+        ChatSession existing = sessions.get(id);
+        if (existing != null) return existing;
+        ChatSession s = bi4j.newSession(o -> {
+            if (system != null) o.system(system);
         });
+        if (!earlier.isEmpty()) {
+            try {
+                s.restore(earlier);
+            } catch (RuntimeException e) {
+                s.close();
+                throw e;
+            }
+        }
+        sessions.put(id, s);
+        return s;
     }
 
     public Optional<ChatSession> find(UUID id) {

@@ -32,6 +32,7 @@ public final class FakeBi4j implements Bi4j {
     private final AtomicInteger cancels = new AtomicInteger();
     private final List<Session> sessions = new CopyOnWriteArrayList<>();
     private volatile boolean closed;
+    private volatile java.util.concurrent.CountDownLatch restoreGate;
 
     public FakeBi4j script(String... pieces) {
         this.script = List.of(pieces);
@@ -51,6 +52,12 @@ public final class FakeBi4j implements Bi4j {
 
     public FakeBi4j contextLimit(int tokens) {
         this.contextLimit = tokens;
+        return this;
+    }
+
+    /** Makes {@code restore} wait on the latch, to test what happens while a prefill is slow. */
+    public FakeBi4j blockRestoreOn(java.util.concurrent.CountDownLatch gate) {
+        this.restoreGate = gate;
         return this;
     }
 
@@ -186,6 +193,13 @@ public final class FakeBi4j implements Bi4j {
 
         @Override
         public int restore(List<Message> earlier) {
+            if (restoreGate != null) {
+                try {
+                    restoreGate.await(30, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
             history.addAll(earlier);
             return earlier.stream().mapToInt(m -> estimate(m.text())).sum();
         }

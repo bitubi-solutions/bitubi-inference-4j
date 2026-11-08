@@ -86,4 +86,11 @@ public class OpenAiErrors {
         log.warn("engine error", e);
         return error(HttpStatus.INTERNAL_SERVER_ERROR, "server_error", "engine_error", null, e.getMessage());
     }
+
+    /** Last resort, so that an unexpected failure still leaves in OpenAI's envelope and without a stack trace. */
+    @ExceptionHandler(RuntimeException.class)
+    ResponseEntity<OpenAi.ErrorBody> unexpected(RuntimeException e) {
+        log.error("unexpected error", e);
+        return error(HttpStatus.INTERNAL_SERVER_ERROR, "server_error", "internal_error", null, "internal server error");
+    }
 }

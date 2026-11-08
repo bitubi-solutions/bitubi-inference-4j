@@ -135,4 +135,24 @@ public class TurnServiceTest {
         assertEquals(9, busy.get());
         turns.forEach(Turn::close);
     }
+
+    @Test
+    public void aSlowRestoreDoesNotBlockAnotherSessionInTheSameBin() throws Exception {
+        CountDownLatch gate = new CountDownLatch(1);
+        FakeBi4j slow = new FakeBi4j().blockRestoreOn(gate);
+        SessionRegistry registry = new SessionRegistry();
+        // equal UUID hash codes: the same bin of the registry's map
+        UUID a = new UUID(0, 1);
+        UUID b = new UUID(1, 0);
+        assertEquals(a.hashCode(), b.hashCode());
+        Thread restoring = Thread.ofVirtual().start(() -> registry.getOrCreate(a, slow, null, List.of(Message.user("x"), Message.assistant("y"))));
+        Thread.sleep(300); // let it enter restore
+        var other = java.util.concurrent.CompletableFuture.supplyAsync(() -> registry.getOrCreate(b, slow, null, List.of()));
+        try {
+            other.get(3, java.util.concurrent.TimeUnit.SECONDS);
+        } finally {
+            gate.countDown();
+            restoring.join();
+        }
+    }
 }

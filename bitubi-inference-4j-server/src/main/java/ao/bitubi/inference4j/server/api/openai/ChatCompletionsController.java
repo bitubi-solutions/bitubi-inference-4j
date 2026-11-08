@@ -74,6 +74,7 @@ public class ChatCompletionsController {
         Bi4j bi4j = host.require();
         List<Message> messages = OpenAiMapper.messages(request);
         GenerationSettings settings = OpenAiMapper.settings(request, bi4j.info().contextLength());
+        String model = bi4j.info().name(); // before the turn starts: nothing after turns.start may throw outside the try
         Turn turn = turns.start(session, messages, settings);
         try {
             turn.prime(); // context and engine errors become HTTP errors here, before anything is streamed
@@ -81,7 +82,6 @@ public class ChatCompletionsController {
             turn.close();
             throw e;
         }
-        String model = bi4j.info().name();
         if (Boolean.TRUE.equals(request.stream())) return stream(turn, request, model);
         try (turn) {
             Iterator<Token> it = turn.tokens();
