@@ -36,6 +36,8 @@ export JAVA_HOME=$HOME/.sdkman/candidates/java/25.0.3-amzn
 ./mvnw -B -pl bitubi-inference-4j-tests -am package -Dtest=SmokeTest -Dsurefire.failIfNoSpecifiedTests=false
 ```
 
+- Testes de navegador da UI (Playwright, Chromium): `./mvnw -B -pl bitubi-inference-4j-server -am package -Pe2e -Dtest=ChatE2E -Dsurefire.failIfNoSpecifiedTests=false`; sem rede use `BI4J_E2E_CHROMIUM=<executável>` e `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`. Não correm no build normal; a CI tem o job `ui-e2e`.
+- Arranque rápido: `./run-cli.sh --create-aot <modelo>` cria `bi4j.aot` ao lado do JAR (cache AOT do JDK 25) e os arranques seguintes usam-no sozinhos.
 - `SMOKE_MODEL=1` liga o teste de fumaça; `SMOKE_RECORD=1` grava a referência; `SMOKE_RELAXED=1` só exige texto não vazio.
 - `PERF_BASELINE=1` liga `PerfBaselineTest` (tokens/s).
 - `TestSample` e alguns testes do `bitubi-inference-4j-net` baixam modelos do Hugging Face; `Connection reset` é rede,

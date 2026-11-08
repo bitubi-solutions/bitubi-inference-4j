@@ -10,6 +10,8 @@ on:
     paths:
       - .github/workflows/unit-tests.yaml
       - '**.java'
+      - '**.jte'
+      - 'bitubi-inference-4j-server/src/main/resources/**'
       - '**/pom.xml'
 
 jobs:
@@ -59,3 +61,38 @@ jobs:
         run: |
           docs/benchmarks/run-perf.sh "$JAVA_HOME" | tee perf.txt
           { echo '### Performance on ${{ matrix.os }}'; echo '```'; cat perf.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+  # The chat UI in a real browser (Playwright for Java, headless Chromium). Not part of the default build: -Pe2e.
+  ui-e2e:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest, macos-15-intel ]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: 25
+          distribution: temurin
+          mvn-toolchain-vendor: Eclipse Adoptium
+          cache: maven
+      - name: Cache the browsers Playwright downloads
+        uses: actions/cache@v4
+        with:
+          path: .playwright
+          key: playwright-1.64.0-${{ runner.os }}-${{ runner.arch }}
+      - name: Browser tests of the chat UI
+        run: ./mvnw -B -pl bitubi-inference-4j-server -am package -Pe2e '-Dtest=*E2E' -Dsurefire.failIfNoSpecifiedTests=false
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-e2e-diagnostics-${{ matrix.os }}
+          path: bitubi-inference-4j-server/target/surefire-reports/

@@ -515,3 +515,9 @@ Found while booting the shaded jar (all fixed in the `cli` pom): logback 1.5.6 a
 `jackson-annotations` 2.15 lacks `JsonSerializeAs`, and a transitive `commons-lang3` 3.9 lacks `Strings` (springdoc).
 The cluster coordinator no longer serves the chat API (decision D1). Not done in this phase by design: conversation store,
 UI, eviction, Anthropic, embeddings, tools.
+
+**Phase 2 delivered (2026-11-08).** The chat UI at `/`: server-rendered JTE templates, htmx 4 (SSE) and Markdown rendered on the
+server with escaped HTML; conversations stored as plain-text JSON in `~/.bi4j` (`--data-dir`, `--no-history`, `--open`);
+generations run independently of HTTP connections (stop, reload and reattach work); strict CSP, no inline script or style.
+Browser tests (Playwright for Java, profile `-Pe2e`, CI job `ui-e2e`). The old static page was removed. Startup: the JVM AOT
+cache (`./run-cli.sh --create-aot <model>`) takes HTTP-up from 4.4 s to 1.9 s. Plan `docs/superpowers/plans/2026-11-08-server-phase-2.md`.

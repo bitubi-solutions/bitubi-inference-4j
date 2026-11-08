@@ -191,6 +191,8 @@ with these changes:
   loads: the URL prints at once, `/healthz` is 503 until the model is ready, `/v1/chat/completions` answers 503
   `model_loading` with `Retry-After: 5`, and a failed model keeps the server up with the reason in `/healthz`.
   Scripts that waited for the port must wait for `GET /healthz` = 200.
+* **The old static page under `/ui/` is gone.** `serve` now has a chat UI at `/` (conversations kept as plain text in
+  `~/.bi4j`; `--data-dir` moves them, `--no-history` keeps nothing on disk, `--open` opens the browser).
 * `serve` binds `127.0.0.1` by default (`--host` to change; anything else prints a no-authentication warning and
   needs `--allowed-host <name>` for the names clients use). Requests whose `Host` is not loopback or allowed get 421,
   and cross-site `POST`s get 403.
