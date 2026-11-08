@@ -25,6 +25,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -168,8 +169,8 @@ public class ChatTurnsTest {
     @Test
     public void aWatchedTurnIsNotCancelled() throws Exception {
         chat.close();
-        chat = make(Duration.ofMillis(200));
-        fake.script("a", "b", "c", "d", "e", "f", "g", "h").delayMs(80);
+        chat = make(Duration.ofMillis(1000)); // wide margins: slow CI runners must subscribe well inside it
+        fake.script("a", "b", "c", "d", "e", "f", "g", "h").delayMs(250); // the answer outlasts the timeout
         RunningTurn t = chat.send(UUID.randomUUID(), "hi", SETTINGS);
         watch(t); // stays subscribed
         awaitDone(t);
@@ -212,5 +213,53 @@ public class ChatTurnsTest {
         RunningTurn t = chat.send(UUID.randomUUID(), "hi", SETTINGS);
         chat.close();
         assertTrue(t.finished());
+    }
+
+    @Test
+    public void deletingARunningConversationDoesNotBringItBack() throws Exception {
+        fake.script(Collections.nCopies(100, "t").toArray(String[]::new)).delayMs(20);
+        UUID id = UUID.randomUUID();
+        RunningTurn t = chat.send(id, "hi", SETTINGS);
+        store.delete(id);
+        chat.stop(id, t.id());
+        awaitDone(t);
+        assertTrue(store.load(id).isEmpty(), "a deleted conversation stays deleted");
+    }
+
+    @Test
+    public void aPrimeFailureAfterTheWaitWindowStillEndsTheTurnWithAnError() throws Exception {
+        fake.contextLimit(4).startDelayMs(700);
+        UUID id = UUID.randomUUID();
+        RunningTurn t = chat.send(id, "a very long prompt indeed", SETTINGS); // accepted: the failure comes later
+        List<RunningTurn.Event> events = watch(t);
+        awaitDone(t);
+        RunningTurn.Final last = (RunningTurn.Final) events.get(events.size() - 1);
+        assertNotNull(last.error());
+        var stored = store.load(id).orElseThrow().messages();
+        assertEquals("interrupted", stored.get(stored.size() - 1).status());
+        assertNotEquals("pending", stored.get(0).status());
+        fake.contextLimit(4096).startDelayMs(0);
+        awaitDone(chat.send(id, "short", SETTINGS)); // the session is free again
+    }
+
+    @Test
+    public void aGracefulShutdownStoresTheAnswerAsInterruptedNotStopped() throws Exception {
+        fake.script(Collections.nCopies(100, "t").toArray(String[]::new)).delayMs(30);
+        UUID id = UUID.randomUUID();
+        RunningTurn t = chat.send(id, "hi", SETTINGS);
+        await(() -> t.currentText().length() > 2);
+        chat.close();
+        assertEquals("interrupted", store.load(id).orElseThrow().messages().get(1).status());
+    }
+
+    @Test
+    public void retryingALostMessageDoesNotDuplicateIt() throws Exception {
+        UUID id = UUID.randomUUID();
+        Instant now = Instant.now();
+        store.save(Conversation.create(id, "fake/model", SETTINGS, now).withMessage(Conversation.Msg.user("hi", now, "pending"), now));
+        awaitDone(chat.send(id, "hi", SETTINGS));
+        var m = store.load(id).orElseThrow().messages();
+        assertEquals(2, m.size());
+        assertNull(m.get(0).status());
     }
 }

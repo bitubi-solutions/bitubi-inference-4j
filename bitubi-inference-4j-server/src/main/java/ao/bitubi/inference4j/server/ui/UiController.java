@@ -164,8 +164,13 @@ public class UiController {
             try {
                 if (running.isEmpty()) { // finished before the viewer arrived (or after a restart): tell what was stored
                     store.load(conversationId).flatMap(c -> c.messages().isEmpty() ? Optional.<Conversation.Msg>empty() : Optional.of(c.messages().get(c.messages().size() - 1)))
-                        .filter(m -> "assistant".equals(m.role()))
-                        .ifPresent(m -> sendQuietly(emitter, null, finalHtml(conversationId, m, null)));
+                        .ifPresent(m -> {
+                            if ("assistant".equals(m.role())) sendQuietly(emitter, null, finalHtml(conversationId, m, null));
+                            else { // the question was stored but the answer never was: the server restarted under this page
+                                Conversation.Msg lost = new Conversation.Msg("assistant", "", java.time.Instant.now(), null, null, null, null, "interrupted");
+                                sendQuietly(emitter, null, finalHtml(conversationId, lost, new IllegalStateException("the server restarted while answering. Reload the page to retry.")));
+                            }
+                        });
                     sendDone(emitter);
                     return;
                 }

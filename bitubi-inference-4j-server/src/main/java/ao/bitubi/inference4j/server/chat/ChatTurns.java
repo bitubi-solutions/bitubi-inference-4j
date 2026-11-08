@@ -52,6 +52,7 @@ public final class ChatTurns implements AutoCloseable {
     private final long orphanNanos;
     private final long snapshotIntervalNanos;
     private final Map<UUID, RunningTurn> running = new ConcurrentHashMap<>();
+    private volatile boolean closing;
     private final Map<UUID, Turn> sdkTurns = new ConcurrentHashMap<>();
     private final ScheduledExecutorService watcher = Executors.newSingleThreadScheduledExecutor(r -> Thread.ofPlatform().daemon().name("bi4j-orphan-watch").unstarted(r));
 
@@ -92,6 +93,7 @@ public final class ChatTurns implements AutoCloseable {
         } catch (TimeoutException slowStart) {
             // the model is still working on the prompt: accept; a later failure becomes an error event
         } catch (ExecutionException e) {
+            rt.rejected.set(true);
             running.remove(conversationId, rt);
             sdkTurns.remove(rt.id());
             rt.userStored.complete(null);
@@ -101,53 +103,77 @@ public final class ChatTurns implements AutoCloseable {
             Thread.currentThread().interrupt();
             turn.cancel();
         }
-        store.save(base.withMessage(Conversation.Msg.user(text, clock.instant(), "pending"), clock.instant()));
+        Conversation.Msg sent = Conversation.Msg.user(text, clock.instant(), "pending");
+        List<Conversation.Msg> before = c.messages();
+        boolean retry = !before.isEmpty() && isLostCopyOf(before.get(before.size() - 1), text);
+        store.save(retry ? base.withLastMessage(sent, clock.instant()) : base.withMessage(sent, clock.instant()));
         rt.userStored.complete(null);
         return rt;
+    }
+
+    /** Retry after a restart sends the same text again: it replaces the lost message instead of repeating it. */
+    private static boolean isLostCopyOf(Conversation.Msg m, String text) {
+        return "user".equals(m.role()) && "pending".equals(m.status()) && text.equals(m.text());
     }
 
     private void run(RunningTurn rt, Turn turn, Conversation base, String userText) {
         Conversation.Msg assistant;
         Throwable error = null;
         try (turn) {
+            boolean primed = false;
             try {
                 turn.prime();
                 rt.primed.complete(null);
+                primed = true;
             } catch (RuntimeException e) {
                 rt.primed.completeExceptionally(e);
-                return;
-            }
-            long last = System.nanoTime();
-            try {
-                Iterator<ao.bitubi.inference4j.sdk.Token> it = turn.tokens();
-                while (it.hasNext()) {
-                    rt.append(it.next().text());
-                    long now = System.nanoTime();
-                    if (now - last >= snapshotIntervalNanos) {
-                        rt.publishSnapshot();
-                        last = now;
-                    }
-                }
-                ChatResponse r = turn.result();
-                String status = r.finishReason() == FinishReason.CANCELLED ? "stopped" : null;
-                assistant = new Conversation.Msg(
-                    "assistant",
-                    rt.currentText(),
-                    clock.instant(),
-                    r.finishReason().name(),
-                    r.usage().promptTokens(),
-                    r.usage().generatedTokens(),
-                    r.usage().tokensPerSecond(),
-                    status
-                );
-            } catch (RuntimeException e) {
-                log.warn("generation failed: {}", e.toString());
+                rt.awaitUserStored();
+                if (rt.rejected.get()) return; // send() reported it: nothing was stored
+                log.warn("generation failed while reading the prompt: {}", e.toString());
                 error = e;
-                assistant = new Conversation.Msg("assistant", rt.currentText(), clock.instant(), null, null, null, null, "interrupted");
+            }
+            if (primed) {
+                long last = System.nanoTime();
+                try {
+                    Iterator<ao.bitubi.inference4j.sdk.Token> it = turn.tokens();
+                    while (it.hasNext()) {
+                        rt.append(it.next().text());
+                        long now = System.nanoTime();
+                        if (now - last >= snapshotIntervalNanos) {
+                            rt.publishSnapshot();
+                            last = now;
+                        }
+                    }
+                    ChatResponse r = turn.result();
+                    // a server shutting down interrupts the answer (Retry offered); the user's Stop is "stopped"
+                    String status = r.finishReason() == FinishReason.CANCELLED ? (closing ? "interrupted" : "stopped") : null;
+                    assistant = new Conversation.Msg(
+                        "assistant",
+                        rt.currentText(),
+                        clock.instant(),
+                        r.finishReason().name(),
+                        r.usage().promptTokens(),
+                        r.usage().generatedTokens(),
+                        r.usage().tokensPerSecond(),
+                        status
+                    );
+                } catch (RuntimeException e) {
+                    log.warn("generation failed: {}", e.toString());
+                    error = e;
+                    assistant = new Conversation.Msg("assistant", rt.currentText(), clock.instant(), null, null, null, null, "interrupted");
+                }
+            } else {
+                assistant = new Conversation.Msg("assistant", "", clock.instant(), null, null, null, null, "interrupted");
             }
             rt.awaitUserStored();
             try {
-                Conversation done = store.load(base.id()).orElse(base);
+                Optional<Conversation> stored = store.load(base.id());
+                if (stored.isEmpty()) { // deleted while it was answering: it stays deleted
+                    log.info("{} was deleted during the answer; not storing it", base.id());
+                    rt.finish(new RunningTurn.Final(assistant, error));
+                    return;
+                }
+                Conversation done = stored.get();
                 int lastIndex = done.messages().size() - 1;
                 if (lastIndex >= 0 && "user".equals(done.messages().get(lastIndex).role())) {
                     done = done.withLastMessage(done.messages().get(lastIndex).withStatus(null), clock.instant());
@@ -193,6 +219,7 @@ public final class ChatTurns implements AutoCloseable {
 
     @Override
     public void close() {
+        closing = true;
         watcher.shutdownNow();
         sdkTurns.values().forEach(Turn::cancel);
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);

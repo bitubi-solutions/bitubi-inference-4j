@@ -72,6 +72,11 @@ public class ServeCommand extends SimpleBaseCommand {
         return host.contains(":") && !host.startsWith("[") ? "[" + host + "]" : host;
     }
 
+    /** Spring Boot starts the JVM headless, which makes the browser launcher fail; --open needs it off. */
+    void prepareBrowser() {
+        if (open) System.setProperty("java.awt.headless", "false");
+    }
+
     private static void openBrowser(String url) {
         try {
             if (java.awt.Desktop.isDesktopSupported() && java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.BROWSE)) {
@@ -111,6 +116,7 @@ public class ServeCommand extends SimpleBaseCommand {
                 );
             }
             ModelHost modelHost = new ModelHost(this::load);
+            prepareBrowser();
             new SpringApplicationBuilder(ServerApplication.class).initializers(ServerApplication.withModelHost(modelHost))
                 .properties(
                     "server.address=" + host,

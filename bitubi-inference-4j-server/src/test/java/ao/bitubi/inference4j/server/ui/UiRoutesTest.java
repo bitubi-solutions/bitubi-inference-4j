@@ -310,6 +310,18 @@ public class UiRoutesTest {
     }
 
     @Test
+    public void aStreamReconnectingAfterARestartTellsTheAnswerWasInterrupted() throws Exception {
+        UUID id = UUID.randomUUID();
+        Conversation c = Conversation.create(id, "fake/model", UiModels.DEFAULT_SETTINGS, Instant.now())
+            .withMessage(Conversation.Msg.user("hello?", Instant.now(), "pending"), Instant.now());
+        new FileConversationStore(dir).save(c);
+        try (TestServer s = TestServer.start(ModelHost.ready(fake), "bi4j.server.history=true", "bi4j.server.data-dir=" + dir)) {
+            List<Sse> events = events(s, id, UUID.randomUUID());
+            assertTrue(events.stream().anyMatch(e -> e.data().contains("restarted") && e.data().contains("id=\"send\"")), events.toString());
+        }
+    }
+
+    @Test
     public void renameSearchAndDelete() throws Exception {
         UUID id = UUID.randomUUID();
         try (TestServer s = TestServer.start(ModelHost.ready(fake), "bi4j.server.history=true", "bi4j.server.data-dir=" + dir)) {

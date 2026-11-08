@@ -20,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Assumptions;
@@ -140,5 +141,18 @@ public class FileConversationStoreTest {
         new FileConversationStore(data).save(sample(UUID.randomUUID()));
         assertEquals("rwx------", java.nio.file.attribute.PosixFilePermissions.toString(Files.getPosixFilePermissions(data)));
         assertEquals("rwx------", java.nio.file.attribute.PosixFilePermissions.toString(Files.getPosixFilePermissions(data.resolve("conversations"))));
+    }
+
+    @Test
+    void aFileMissingARequiredFieldIsSkippedNotACrash() throws Exception {
+        UUID good = UUID.randomUUID();
+        UUID bad = UUID.randomUUID();
+        FileConversationStore store = new FileConversationStore(dir);
+        store.save(sample(good));
+        store.save(sample(bad));
+        Path f = dir.resolve("conversations").resolve(bad + ".json");
+        Files.writeString(f, Files.readString(f).replaceAll("\"updatedAt\"\\s*:\\s*\"[^\"]*\",?", ""));
+        assertEquals(List.of(good), store.list().stream().map(Conversation::id).toList());
+        assertTrue(store.load(bad).isEmpty());
     }
 }

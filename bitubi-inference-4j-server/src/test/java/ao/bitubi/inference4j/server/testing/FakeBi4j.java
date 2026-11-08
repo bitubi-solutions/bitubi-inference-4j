@@ -26,6 +26,7 @@ import java.util.stream.StreamSupport;
 public final class FakeBi4j implements Bi4j {
     private volatile List<String> script = List.of("Hello");
     private volatile long delayMs;
+    private volatile long startDelayMs;
     private volatile int failIndex = -1;
     private volatile RuntimeException failure;
     private volatile int contextLimit = 4096;
@@ -36,6 +37,12 @@ public final class FakeBi4j implements Bi4j {
 
     public FakeBi4j script(String... pieces) {
         this.script = List.of(pieces);
+        return this;
+    }
+
+    /** Waits this long before the first token (the prompt is being processed); the context check comes after it. */
+    public FakeBi4j startDelayMs(long ms) {
+        this.startDelayMs = ms;
         return this;
     }
 
@@ -257,6 +264,13 @@ public final class FakeBi4j implements Bi4j {
                 public boolean hasNext() {
                     if (!checked) {
                         checked = true;
+                        if (startDelayMs > 0) {
+                            try {
+                                Thread.sleep(startDelayMs);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                            }
+                        }
                         int held = session.contextTokens();
                         int add = estimate(prompt);
                         if (held + add > contextLimit) {

@@ -44,6 +44,8 @@ public final class RunningTurn {
     private volatile long lastSubscriberLeftNanos;
     final CompletableFuture<Void> primed = new CompletableFuture<>();
     final CompletableFuture<Void> userStored = new CompletableFuture<>();
+    /** Set when send() reported a failure to its caller, so the run thread has nothing left to tell. */
+    final java.util.concurrent.atomic.AtomicBoolean rejected = new java.util.concurrent.atomic.AtomicBoolean();
 
     RunningTurn(UUID conversationId) {
         this.conversationId = conversationId;

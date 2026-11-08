@@ -75,4 +75,19 @@ public class ServeCommandTest {
         assertFalse(d.open);
         assertNull(d.dataDir);
     }
+
+    @Test
+    public void openLeavesAwtHeadlessOff() {
+        String before = System.getProperty("java.awt.headless");
+        try {
+            System.clearProperty("java.awt.headless");
+            ServeCommand c = new ServeCommand();
+            c.open = true;
+            c.prepareBrowser();
+            assertEquals("false", System.getProperty("java.awt.headless"));
+        } finally {
+            if (before == null) System.clearProperty("java.awt.headless");
+            else System.setProperty("java.awt.headless", before);
+        }
+    }
 }

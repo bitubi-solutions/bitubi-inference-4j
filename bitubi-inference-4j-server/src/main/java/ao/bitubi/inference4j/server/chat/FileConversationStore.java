@@ -123,6 +123,11 @@ public final class FileConversationStore implements ConversationStore {
                 log.warn("ignoring {}: the file holds another conversation id", f);
                 return Optional.empty();
             }
+            if (c.createdAt() == null || c.updatedAt() == null || c.settings() == null || c.model() == null
+                || c.messages().stream().anyMatch(m -> m == null || m.role() == null || m.text() == null || m.at() == null)) {
+                log.warn("ignoring {}: a required field is missing", f);
+                return Optional.empty();
+            }
             return Optional.of(c);
         } catch (RuntimeException | IOException e) {
             log.warn("ignoring {}: cannot be read ({})", f, e.toString());
