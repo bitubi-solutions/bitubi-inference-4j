@@ -288,6 +288,7 @@ public final class FakeBi4j implements Bi4j {
         private void finish() {
             if (!finished.compareAndSet(false, true)) return;
             FinishReason reason = exhausted ? FinishReason.STOP : FinishReason.CANCELLED;
+            if (reason == FinishReason.CANCELLED) cancels.incrementAndGet(); // counts generations that ended early
             result = new ChatResponse(
                 text.toString(),
                 reason,
@@ -308,7 +309,7 @@ public final class FakeBi4j implements Bi4j {
 
         @Override
         public void cancel() {
-            if (cancelled.compareAndSet(false, true)) cancels.incrementAndGet();
+            cancelled.set(true);
         }
 
         @Override

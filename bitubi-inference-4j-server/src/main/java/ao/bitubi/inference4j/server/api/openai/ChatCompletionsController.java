@@ -98,6 +98,8 @@ public class ChatCompletionsController {
     private SseEmitter stream(Turn turn, OpenAi.ChatCompletionRequest request, String model) {
         SseEmitter emitter = new SseEmitter(0L); // no timeout: generations can be long
         boolean usage = request.streamOptions() != null && Boolean.TRUE.equals(request.streamOptions().includeUsage());
+        emitter.onError(e -> turn.cancel()); // the container reports a dropped connection here, before any write fails
+        emitter.onTimeout(turn::cancel);
         Thread.ofVirtual().name("bi4j-sse-" + turn.id()).start(() -> {
             String id = id(turn);
             long created = now();
@@ -113,6 +115,7 @@ public class ChatCompletionsController {
                 emitter.send(SseEmitter.event().data("[DONE]"));
                 emitter.complete();
             } catch (IOException | IllegalStateException clientGone) {
+                log.debug("client left the stream: {}", clientGone.toString());
                 turn.cancel(); // the API cancels when the client leaves
                 emitter.completeWithError(clientGone);
             } catch (RuntimeException e) {
