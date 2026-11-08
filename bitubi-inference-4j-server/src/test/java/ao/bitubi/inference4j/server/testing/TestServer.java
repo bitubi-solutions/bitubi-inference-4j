@@ -30,7 +30,7 @@ public final class TestServer implements AutoCloseable {
     private final int port;
 
     public static TestServer start(ModelHost host, String... properties) {
-        List<String> props = new ArrayList<>(List.of("server.port=0", "server.address=127.0.0.1"));
+        List<String> props = new ArrayList<>(List.of("server.port=0", "server.address=127.0.0.1", "bi4j.server.history=false"));
         props.addAll(List.of(properties));
         ConfigurableApplicationContext ctx = new SpringApplicationBuilder(ServerApplication.class).properties(props.toArray(String[]::new))
             .initializers(c -> c.getBeanFactory().registerSingleton("modelHost", host))
@@ -63,6 +63,15 @@ public final class TestServer implements AutoCloseable {
 
     public HttpResponse<String> post(String path, String json, String... headers) throws Exception {
         HttpRequest.Builder b = HttpRequest.newBuilder(uri(path)).header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(json));
+        if (headers.length > 0) b.headers(headers);
+        return client.send(b.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    /** Any method with a form-encoded body, e.g. {@code request("PATCH", "/c/x", "title=a")}. */
+    public HttpResponse<String> request(String method, String path, String body, String... headers) throws Exception {
+        HttpRequest.Builder b = HttpRequest.newBuilder(uri(path))
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .method(method, body == null ? HttpRequest.BodyPublishers.noBody() : HttpRequest.BodyPublishers.ofString(body));
         if (headers.length > 0) b.headers(headers);
         return client.send(b.build(), HttpResponse.BodyHandlers.ofString());
     }

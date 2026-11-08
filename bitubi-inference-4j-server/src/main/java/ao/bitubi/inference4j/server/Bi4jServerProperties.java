@@ -16,6 +16,6 @@ import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-/** {@code bi4j.server.*}: {@code allowed-hosts} are Host names accepted besides the loopback ones. */
+/** {@code bi4j.server.*}: {@code allowed-hosts} are Host names accepted besides loopback; {@code history} and {@code data-dir} say where conversations live (default {@code ~/.bi4j}). */
 @ConfigurationProperties("bi4j.server")
-public record Bi4jServerProperties(@DefaultValue List<String> allowedHosts) {}
+public record Bi4jServerProperties(@DefaultValue List<String> allowedHosts, @DefaultValue("true") boolean history, @DefaultValue("") String dataDir) {}

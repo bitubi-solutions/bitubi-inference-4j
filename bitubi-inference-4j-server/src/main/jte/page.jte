@@ -6,7 +6,7 @@
   <div class="main">
     <header class="top">
       <h1 class="model-name">${page.model().name()}</h1>
-      <span class="model-info">${page.model().info()}</span>
+      <span id="model-info" class="model-info">${page.model().info()}</span>
     </header>
     <div id="content">
       @if(page.model().ready())
