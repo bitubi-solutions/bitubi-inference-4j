@@ -168,6 +168,11 @@ public class StreamingTest {
             Iterator<Token> it = other.chat().user("Count to 100.").maxNewTokens(100).stream().iterator();
             assertTrue(it.hasNext());
             other.close();
+            // the reader is told why its stream ended, not just that it did
+            IllegalStateException closedBehindIt = assertThrows(IllegalStateException.class, () -> {
+                while (true) it.next();
+            });
+            assertTrue(closedBehindIt.getMessage(), closedBehindIt.getMessage().contains("Bi4j is closed"));
             recording.stop();
             recording.dump(jfr);
             // user-defined events are enabled by default, so Load and Generation are in the file too: count only ours

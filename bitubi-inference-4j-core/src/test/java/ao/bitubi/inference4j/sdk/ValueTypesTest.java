@@ -27,6 +27,7 @@ public class ValueTypesTest {
         assertThrows(IllegalArgumentException.class, () -> new GenerationSettings(0, 0.7f, List.of()));
         assertThrows(IllegalArgumentException.class, () -> new GenerationSettings(10, -0.1f, List.of()));
         assertThrows(IllegalArgumentException.class, () -> new GenerationSettings(10, Float.NaN, List.of()));
+        assertThrows(IllegalArgumentException.class, () -> new GenerationSettings(10, Float.POSITIVE_INFINITY, List.of()));
         assertThrows(IllegalArgumentException.class, () -> new GenerationSettings(10, 0.7f, List.of("")));
         assertThrows(NullPointerException.class, () -> new GenerationSettings(10, 0.7f, Arrays.asList((String) null)));
     }

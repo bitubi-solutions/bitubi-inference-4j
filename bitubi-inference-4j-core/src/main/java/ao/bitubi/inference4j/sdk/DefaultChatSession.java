@@ -87,7 +87,11 @@ final class DefaultChatSession implements ChatSession {
     /** Takes the session for one call; a second concurrent call is rejected, never queued. */
     private void acquire() {
         if (closed.get()) throw new IllegalStateException("ChatSession is closed");
-        if (!busy.compareAndSet(false, true)) throw new SessionBusyException(id);
+        if (!busy.compareAndSet(false, true)) {
+            // close() takes the busy flag to keep new calls out: that is "closed", not "busy"
+            if (closed.get()) throw new IllegalStateException("ChatSession is closed");
+            throw new SessionBusyException(id);
+        }
         if (closed.get()) { // closed between the check and the take
             release();
             throw new IllegalStateException("ChatSession is closed");

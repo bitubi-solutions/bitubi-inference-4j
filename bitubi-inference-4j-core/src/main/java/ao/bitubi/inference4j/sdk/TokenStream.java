@@ -95,10 +95,14 @@ final class TokenStream implements Spliterator<Token> {
         if (t != null) t.interrupt();
     }
 
+    private String closedMessage() {
+        return owner.isClosed() ? "Bi4j is closed: the stream was cancelled" : "The stream is closed";
+    }
+
     @Override
     public boolean tryAdvance(Consumer<? super Token> action) {
         if (finished) return false;
-        if (cancelled.get()) throw new IllegalStateException("The stream is closed");
+        if (cancelled.get()) throw new IllegalStateException(closedMessage());
         if (!started) start();
         Object item;
         try {
@@ -115,7 +119,7 @@ final class TokenStream implements Spliterator<Token> {
         finished = true;
         owner.streams().remove(this);
         Throwable error = ((End) item).error();
-        if (cancelled.get() && error == null) throw new IllegalStateException("The stream is closed");
+        if (cancelled.get() && error == null) throw new IllegalStateException(closedMessage());
         if (error instanceof Bi4jException || error instanceof IllegalArgumentException || error instanceof IllegalStateException) {
             throw (RuntimeException) error;
         }

@@ -194,15 +194,20 @@ final class DefaultBi4j implements Bi4j {
             );
             return dir.toPath();
         } catch (IOException e) {
-            throw new ModelNotFoundException(
-                "Could not get model '"
-                    + b.modelId
-                    + "': "
-                    + e.getMessage()
-                    + (b.authToken == null ? ". For a gated or private model, pass authToken(...)." : ""),
-                e
-            );
+            throw new ModelNotFoundException(modelNotFoundMessage(b.modelId, e, b.authToken != null), e);
         }
+    }
+
+    /** A network failure is not a permissions problem: only the other failures hint at the token. */
+    static String modelNotFoundMessage(String modelId, IOException e, boolean hasToken) {
+        String base = "Could not get model '" + modelId + "': " + e.getMessage();
+        boolean network = e instanceof java.net.UnknownHostException
+            || e instanceof java.net.ConnectException
+            || e instanceof java.net.SocketTimeoutException
+            || e.getClass().getSimpleName().contains("Timeout") // e.g. java.net.http.HttpTimeoutException: this module does not read java.net.http
+            || e instanceof java.net.NoRouteToHostException;
+        if (network) return base + ". Check the network connection, or point model(Path) at a local copy.";
+        return base + (hasToken ? "" : ". For a gated or private model, pass authToken(...).");
     }
 
     private static AbstractModel load(ModelInspection m, Path root, Path workDir, WorkingTypes t, Integer threads) {
@@ -253,6 +258,10 @@ final class DefaultBi4j implements Bi4j {
         return workDir;
     }
 
+    boolean isClosed() {
+        return closed.get();
+    }
+
     void ensureOpen() {
         if (closed.get()) throw new IllegalStateException("Bi4j is closed");
     }
@@ -287,6 +296,10 @@ final class DefaultBi4j implements Bi4j {
         options.accept(b);
         DefaultChatSession session = new DefaultChatSession(this, b.build());
         sessions.add(session);
+        if (closed.get()) { // close() ran between the check and the add: it did not see this session
+            session.close();
+            throw new IllegalStateException("Bi4j is closed");
+        }
         return session;
     }
 

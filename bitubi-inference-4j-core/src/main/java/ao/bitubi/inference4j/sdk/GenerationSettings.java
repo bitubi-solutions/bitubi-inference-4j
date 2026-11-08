@@ -27,7 +27,7 @@ public record GenerationSettings(int maxNewTokens, float temperature, List<Strin
     /** Validates the values; see the record components. */
     public GenerationSettings {
         if (maxNewTokens <= 0) throw new IllegalArgumentException("maxNewTokens must be positive: " + maxNewTokens);
-        if (Float.isNaN(temperature) || temperature < 0) {
+        if (Float.isNaN(temperature) || Float.isInfinite(temperature) || temperature < 0) {
             throw new IllegalArgumentException("temperature must be 0 or more: " + temperature);
         }
         stop = List.copyOf(stop); // rejects a null list or a null element
