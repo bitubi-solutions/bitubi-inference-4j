@@ -25,8 +25,8 @@
 
 ## Decisions this plan needs from the author
 
-- **D1 (UI startup time).** The acceptance asks for the URL in under 2 s; phase 1 measured 5.0 s from process start to the first answered request, on a slow `/mnt/c` file system. Task 11 measures where the time goes and applies the cheap fixes (lazy springdoc, trimmed autoconfiguration, optionally AppCDS). **Recommendation:** accept "under 2 s of Spring time after the JVM is up" as the criterion on slow file systems, and report both numbers. Otherwise the criterion needs AppCDS or a native image, a bigger project.
-- **D2 (E2E on the dev machine).** Playwright for Java downloads its own Chromium. **Recommendation:** run the E2E job only in CI and locally with `-Pe2e` when the browser is available; the plan does not block on it.
+- **D1 (UI startup time), decided by the author:** use the JDK 25 AOT cache (JEP 483/514/515). Task 11 measures the cold start, adds a launcher path that records and reuses an AOT cache (`-XX:AOTCacheOutput` on a training run, `-XX:AOTCache` afterwards) and reports cold and cached numbers. The cache is tied to the exact jar and JVM, so it is created on demand (`run-cli.sh --create-aot`) and ignored when stale.
+- **D2 (E2E on the dev machine), accepted by the author.** Playwright for Java downloads its own Chromium. **Recommendation:** run the E2E job only in CI and locally with `-Pe2e` when the browser is available; the plan does not block on it.
 
 ## Review Focus
 
@@ -311,13 +311,14 @@ Behaviours (each is a test):
 
 ---
 
-### Task 11: Startup time
+### Task 11: Startup time with the AOT cache
 
-**Files:** `bitubi-inference-4j-cli/.../ServeCommand.java`, `bitubi-inference-4j-server/src/main/resources/application.properties`, possibly `docs/` notes
+**Files:** `run-cli.sh`, `run-cli.bat` (if it exists), `bitubi-inference-4j-server/src/main/resources/application.properties`, `docs/` note
 
-- [ ] **Step 1: measure** with the shaded jar and the small local model: JVM start to `Started` log line, to the first answered `/healthz`, and to `READY`; use `-Xlog:class+load` counts and `-Dspring.main.lazy-initialization=true` as experiments, and `-verbose` startup timings (`--debug` off). Record the numbers in the commit message.
-- [ ] **Step 2: apply the cheap fixes** that measurably help and break nothing: `spring.main.lazy-initialization=true` with the controllers and filters exempt only if needed, springdoc initialised lazily (`springdoc.api-docs.enabled` stays on but the scan runs on the first request), `spring.jmx.enabled=false`, `server.tomcat.mbeanregistry.enabled=false`, `spring.main.banner-mode=off`, no unused autoconfiguration (`spring.autoconfigure.exclude` for what the server never uses, verified by the tests). Optionally document `-XX:SharedArchiveFile` (AppCDS) as a launcher option; do not add it to the default launcher in this phase.
-- [ ] **Step 3: re-measure and run the whole server suite and `JarBootTest`.** **Step 4: commit** `perf(server): faster startup (numbers in the message)`. Report both numbers to the author (decision D1).
+- [ ] **Step 1: measure the cold start** with the shaded jar and the small local model: process start to the `Started` line, to the first answered `/healthz`, to `READY`. Record the numbers.
+- [ ] **Step 2: cheap fixes first** that measurably help and break nothing: `spring.jmx.enabled=false`, `server.tomcat.mbeanregistry.enabled=false`, springdoc scanning on first request, unused autoconfiguration excluded (verified by the tests). Re-measure.
+- [ ] **Step 3: AOT cache.** Training run: `java <flags> -XX:AOTCacheOutput=<cache> -jar bi4j.jar serve <model>` driven by a short script (start, `GET /healthz`, one `GET /` and one chat request against the small model, then stop the process with SIGTERM so the JVM writes the cache); production run adds `-XX:AOTCache=<cache>`. Add to `run-cli.sh` an option `--create-aot` (runs the training run, stores the cache next to the jar as `bi4j.aot`) and make the launcher add `-XX:AOTCache=` automatically when `bi4j.aot` exists and is newer than the jar; a stale or incompatible cache must never stop the launch (the JVM falls back with a warning; confirm and pass `-Xshare:auto`). Note the cache must be created with the same module flags (`--add-modules=jdk.incubator.vector` and the others).
+- [ ] **Step 4: re-measure cold and cached**, run the whole server suite and `JarBootTest`, and check the JVM flags work on the CI JDK (Temurin 25) by running the training and cached launch once on Linux. **Step 5: commit** `perf: AOT cache for faster startup (cold X s, cached Y s)`; report both numbers to the author.
 
 ---
 
