@@ -32,20 +32,55 @@ BI4J_JVM_ARGS="$BI4J_JVM_ARGS -ea -server -Dstdout.encoding=UTF-8 -Djdk.incubato
  -XX:+UnlockDiagnosticVMOptions -XX:CompilerDirectivesFile=./inlinerules.json -XX:+AlignVector -XX:+UseStringDeduplication \
  -XX:+UseCompressedOops -XX:+UseCompressedClassPointers"
         
-# Check if PREINSTALLED_JAR environment variable is set
+# Which jar runs, and where its AOT cache lives (next to it)
 if [[ -z "$BI4J_PREINSTALLED_JAR" ]]; then
+  BI4J_JAR=$BI4J_RELATIVE_JAR
   # If the relative JAR doesn't exist, build it
-  if [[ ! -f $BI4J_RELATIVE_JAR ]]; then
-    echo "The JAR $BI4J_RELATIVE_JAR is missing. Attempting to build..."
+  if [[ ! -f $BI4J_JAR ]]; then
+    echo "The JAR $BI4J_JAR is missing. Attempting to build..."
     ./mvnw clean package -DskipTests
     if [[ $? -ne 0 ]]; then
       echo "Error building the JAR. Please check your build setup."
       exit 1
     fi
   fi
-  # Run the JAR in a relative directory
-  $JAVA $BI4J_JVM_ARGS $BI4J_JVM_ARGS_EXTRA  -jar $BI4J_RELATIVE_JAR "$@"
 else
-  # If PREINSTALLED_JAR is set, run the JAR specified by the variable
-  $JAVA $BI4J_JVM_ARGS $BI4J_JVM_ARGS_EXTRA -jar $BI4J_PREINSTALLED_JAR "$@"
+  BI4J_JAR=$BI4J_PREINSTALLED_JAR
 fi
+BI4J_AOT="$(dirname "$BI4J_JAR")/bi4j.aot"
+
+# ./run-cli.sh --create-aot <model> [serve options]: starts the server once, exercises it and stops it, so the JVM
+# writes the class/AOT cache (JDK 25). Later launches pick it up by themselves and start about twice as fast.
+if [[ "$1" == "--create-aot" ]]; then
+  shift
+  if [[ $# -eq 0 ]]; then
+    echo "Usage: $0 --create-aot <model> [serve options]"
+    exit 1
+  fi
+  PORT=${BI4J_AOT_PORT:-18999}
+  rm -f "$BI4J_AOT"
+  $JAVA $BI4J_JVM_ARGS $BI4J_JVM_ARGS_EXTRA -XX:AOTCacheOutput="$BI4J_AOT" -jar "$BI4J_JAR" serve "$@" --port "$PORT" --no-history &
+  PID=$!
+  for _ in $(seq 1 600); do
+    kill -0 $PID 2>/dev/null || { echo "The training run stopped early; no cache was written."; exit 1; }
+    curl -s -m 1 "http://127.0.0.1:$PORT/healthz" | grep -qi '"ready"' && break
+    sleep 0.5
+  done
+  curl -s -m 5 "http://127.0.0.1:$PORT/" -o /dev/null
+  curl -s -m 5 "http://127.0.0.1:$PORT/v1/models" -o /dev/null
+  curl -s -m 120 "http://127.0.0.1:$PORT/v1/chat/completions" -H 'Content-Type: application/json' -d '{"messages":[{"role":"user","content":"hi"}],"max_tokens":8}' -o /dev/null
+  curl -s -m 120 -N "http://127.0.0.1:$PORT/v1/chat/completions" -H 'Content-Type: application/json' -d '{"messages":[{"role":"user","content":"hi"}],"max_tokens":8,"stream":true}' -o /dev/null
+  kill -TERM $PID
+  wait $PID 2>/dev/null
+  if [[ -f "$BI4J_AOT" ]]; then echo "AOT cache written: $BI4J_AOT"; exit 0; fi
+  echo "The JVM did not write a cache."
+  exit 1
+fi
+
+# Use the cache when it is newer than the jar. A stale or incompatible cache never stops the launch: the JVM
+# prints a warning and runs without it.
+if [[ -f "$BI4J_AOT" && "$BI4J_AOT" -nt "$BI4J_JAR" ]]; then
+  BI4J_JVM_ARGS="$BI4J_JVM_ARGS -XX:AOTCache=$BI4J_AOT"
+fi
+
+$JAVA $BI4J_JVM_ARGS $BI4J_JVM_ARGS_EXTRA -jar "$BI4J_JAR" "$@"

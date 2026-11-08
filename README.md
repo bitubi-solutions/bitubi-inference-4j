@@ -54,6 +54,15 @@ export JAVA_HOME=/path/to/jdk-25
 
 Open http://localhost:8080/ in your browser.
 
+Starts about twice as fast with a JVM AOT cache. Create it once (it runs the server briefly and stops it), and every
+later `./run-cli.sh` launch uses it while it is newer than the jar:
+
+```shell
+./run-cli.sh --create-aot tjake/Llama-3.2-1B-Instruct-JQ4
+```
+
+Chat history is kept as plain text in `~/.bi4j` (`--data-dir` changes it, `--no-history` keeps nothing on disk).
+
 ```
 Usage:
 
