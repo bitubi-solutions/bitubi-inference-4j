@@ -35,11 +35,17 @@ import java.util.Map;
 import java.util.Optional;
 
 @CommandLine.Command(name = "cluster-coordinator", description = "Starts a distributed rest api for a model using cluster workers", abbreviateSynopsis = true)
-@SpringBootApplication(scanBasePackages = { "ao.bitubi.inference4j.net.openai", "ao.bitubi.inference4j.cli.commands",
-    "ao.bitubi.inference4j.net.grpc" })
+@SpringBootApplication(scanBasePackages = { "ao.bitubi.inference4j.net.grpc" })
 @SpringBootConfiguration
 @Configuration
 public class ClusterCoordinatorCommand extends ModelBaseCommand implements WebMvcConfigurer {
+
+    protected static volatile Coordinator coordinator;
+
+    @org.springframework.context.annotation.Bean
+    public Coordinator getCoordinatorBean() {
+        return coordinator;
+    }
 
     @CommandLine.Option(names = { "--worker-count" }, paramLabel = "ARG", description = "signifies this instance is a coordinator")
     int workerCount = 1;
@@ -71,7 +77,6 @@ public class ClusterCoordinatorCommand extends ModelBaseCommand implements WebMv
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         registry.addResourceHandler("/admin/**").addResourceLocations("classpath:/static/admin/");
-        registry.addResourceHandler("/ui/**").addResourceLocations("classpath:/static/ui/");
     }
 
     @Override
@@ -106,8 +111,8 @@ public class ClusterCoordinatorCommand extends ModelBaseCommand implements WebMv
                 Optional.ofNullable(downloadSection.branch)
             );
 
-            // This wires up the bean for the rest api
-            ApiServiceCommand.m = c;
+            // The topology endpoint reads the coordinator through this bean
+            coordinator = c;
 
             new Thread(() -> {
                 try {
@@ -144,8 +149,8 @@ public class ClusterCoordinatorCommand extends ModelBaseCommand implements WebMv
                 }).start();
             }
         
-            System.out.println("Chat UI: http://localhost:" + port);
-            System.out.println("OpenAI Chat API: http://localhost:" + port + "/chat/completions");
+            System.out.println("Cluster topology: http://localhost:" + port + "/cluster/topology");
+            System.out.println("The chat API is not served in cluster mode yet: it returns with the cluster sub-project.");
 
             // Use SpringApplicationBuilder with ApplicationContextInitializer to set the port dynamically
             new SpringApplicationBuilder(ClusterCoordinatorCommand.class).initializers(applicationContext -> {

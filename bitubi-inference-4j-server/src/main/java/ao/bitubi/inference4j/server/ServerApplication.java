@@ -12,10 +12,21 @@
  */
 package ao.bitubi.inference4j.server;
 
+import org.springframework.beans.factory.support.DefaultListableBeanFactory;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
+import org.springframework.context.ApplicationContextInitializer;
+import org.springframework.context.ConfigurableApplicationContext;
 
 /** The Boot application the CLI starts. The {@code ModelHost} bean is registered by the caller. */
 @SpringBootApplication
 @ConfigurationPropertiesScan
-public class ServerApplication {}
+public class ServerApplication {
+    /** Registers the caller's {@link ModelHost} as the context's bean and closes it with the context. */
+    public static ApplicationContextInitializer<ConfigurableApplicationContext> withModelHost(ModelHost host) {
+        return ctx -> {
+            ctx.getBeanFactory().registerSingleton("modelHost", host);
+            ((DefaultListableBeanFactory) ctx.getBeanFactory()).registerDisposableBean("modelHost", host::close);
+        };
+    }
+}

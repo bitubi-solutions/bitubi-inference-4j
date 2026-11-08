@@ -44,7 +44,7 @@ public class Bi4jCli implements Runnable {
     public static void main(String[] args) {
         CommandLine cli = new CommandLine(new Bi4jCli());
         cli.addSubcommand("chat", new ChatCommand());
-        cli.addSubcommand("restapi", new ApiServiceCommand());
+        cli.addSubcommand("serve", new ServeCommand());
         cli.addSubcommand("complete", new CompleteCommand());
         cli.addSubcommand("list", new ListCommand());
         cli.addSubcommand("download", new DownloadCommand());
@@ -65,7 +65,7 @@ public class Bi4jCli implements Runnable {
     /** Shamelessly stolen from jbang */
     public static CommandGroupRenderer getCommandRenderer() {
         Map<String, List<String>> sections = new LinkedHashMap<>();
-        sections.put("Inference", asList("chat", "restapi", "complete"));
+        sections.put("Inference", asList("chat", "serve", "complete"));
         sections.put("Distributed Inference", asList("cluster-coordinator", "cluster-worker"));
         sections.put("Other", asList("download", "list", "quantize"));
         CommandGroupRenderer renderer = new CommandGroupRenderer(sections);
