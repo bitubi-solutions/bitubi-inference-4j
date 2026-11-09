@@ -75,8 +75,13 @@ abstract class E2EBase {
         return TestServer.start(host, "bi4j.server.history=true", "bi4j.server.data-dir=" + data);
     }
 
+    /** Subclasses may change how the browser context is made (the accessibility run needs to inject axe, which the CSP would block). */
+    Browser.NewContextOptions contextOptions() {
+        return new Browser.NewContextOptions();
+    }
+
     void newPage() {
-        context = browser.newContext();
+        context = browser.newContext(contextOptions());
         context.grantPermissions(List.of("clipboard-read", "clipboard-write"));
         page = context.newPage();
         watch(page);

@@ -59,7 +59,7 @@ button, input, textarea { font: inherit; color: inherit; }
 .app { display: grid; grid-template-columns: var(--sidebar) minmax(0, 1fr); height: 100vh; }
 
 /* sidebar */
-#sidebar { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; background: var(--ink); color: #e8ebf2; overflow-y: auto; }
+#sidebar { display: flex; flex-direction: column; gap: 0.75rem; padding: 1rem; background: #0b1020; color: #e8ebf2; overflow-y: auto; }
 #sidebar a { color: inherit; }
 .brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 650; letter-spacing: 0.01em; }
 .new-chat { display: block; padding: 0.55rem 0.8rem; border: 1px solid #3a4560; border-radius: var(--radius); text-decoration: none; min-height: 44px; line-height: 1.9; }
@@ -71,7 +71,7 @@ button, input, textarea { font: inherit; color: inherit; }
 .conv a { flex: 1; min-width: 0; padding: 0.55rem 0.6rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: none; border-radius: 8px; min-height: 44px; line-height: 1.8; }
 .conv a:hover { background: #151c33; }
 .conv a[aria-current="page"] { background: #1c2547; box-shadow: inset 3px 0 0 var(--accent-bar, #22d3ee); }
-.conv .icon { display: none; padding: 0.3rem 0.45rem; border: 0; border-radius: 6px; background: transparent; color: #c5cde0; font-size: 0.8rem; cursor: pointer; min-height: 32px; }
+.conv .icon { display: none; padding: 0.3rem 0.55rem; border: 0; border-radius: 6px; background: transparent; color: #c5cde0; font-size: 0.8rem; cursor: pointer; min-height: 44px; }
 .conv:hover .icon, .conv:focus-within .icon { display: inline-block; }
 .conv .icon:hover { background: #26305a; color: #fff; }
 .conv.renaming form { display: flex; gap: 0.25rem; width: 100%; }
@@ -113,8 +113,8 @@ dialog.confirm::backdrop { background: rgba(11, 16, 32, 0.55); }
 .md th, .md td { border: 1px solid var(--line); padding: 0.3rem 0.6rem; text-align: left; }
 .md code { font-family: var(--mono); font-size: 0.9em; background: var(--code-inline); padding: 0.1em 0.3em; border-radius: 4px; }
 .code { position: relative; border: 1px solid var(--line); border-radius: var(--radius); background: #0f1530; color: #e8ebf2; overflow: hidden; }
-.code .lang { display: block; padding: 0.35rem 0.8rem; font-size: 0.8rem; color: #9aa5bd; border-bottom: 1px solid #263059; }
-.code button { position: absolute; top: 0.2rem; right: 0.4rem; padding: 0.25rem 0.6rem; border: 0; border-radius: 6px; background: #26305a; color: #fff; font-size: 0.8rem; cursor: pointer; min-height: 28px; }
+.code .lang { display: flex; align-items: center; min-height: 44px; padding: 0.35rem 0.8rem; font-size: 0.8rem; color: #9aa5bd; border-bottom: 1px solid #263059; }
+.code button { position: absolute; top: 0; right: 0; padding: 0.25rem 0.6rem; border: 0; border-radius: 6px; background: #26305a; color: #fff; font-size: 0.8rem; cursor: pointer; min-height: 44px; }
 .code button:hover { background: #33407a; }
 .code pre { margin: 0; padding: 0.8rem; overflow-x: auto; }
 .code pre code { background: none; padding: 0; color: inherit; font-size: 0.88rem; line-height: 1.5; }

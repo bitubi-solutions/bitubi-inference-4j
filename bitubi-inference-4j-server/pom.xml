@@ -111,6 +111,12 @@
                     <version>1.64.0</version>
                     <scope>test</scope>
                 </dependency>
+                <dependency>
+                    <groupId>org.webjars.npm</groupId>
+                    <artifactId>axe-core</artifactId>
+                    <version>4.11.3</version>
+                    <scope>test</scope>
+                </dependency>
             </dependencies>
             <build>
                 <plugins>

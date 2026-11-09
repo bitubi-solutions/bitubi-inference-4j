@@ -23,7 +23,7 @@
       </ul>
     </section>
   @endif
-  <form id="composer" hx-post="/c/${chat.id().toString()}/messages" hx-replace-url="/c/${chat.id().toString()}" hx-target="#messages" hx-swap="beforeend">
+  <form id="composer" aria-label="Message" hx-post="/c/${chat.id().toString()}/messages" hx-replace-url="/c/${chat.id().toString()}" hx-target="#messages" hx-swap="beforeend">
     @template.composerText(oob = false, disabled = chat.readOnly(), placeholder = chat.readOnly() ? chat.readOnlyReason() : "Message bi4j...")
     @template.composerActions(oob = false, conversationId = chat.id(), turnId = null, disabled = chat.readOnly() || chat.running() != null)
   </form>
