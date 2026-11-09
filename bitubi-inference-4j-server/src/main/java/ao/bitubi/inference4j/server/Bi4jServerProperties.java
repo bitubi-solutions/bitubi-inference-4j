@@ -16,6 +16,6 @@ import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-/** {@code bi4j.server.*}: {@code allowed-hosts} are Host names accepted besides loopback; {@code history} and {@code data-dir} say where conversations live (default {@code ~/.bi4j}). */
+/** {@code bi4j.server.*}: {@code allowed-hosts} are Host names accepted besides loopback; {@code history} and {@code data-dir} say where conversations live (default {@code ~/.bi4j}); {@code max-live-sessions} caps open sessions (idle ones are closed, least recently used first, and rebuilt from the stored history when used again). */
 @ConfigurationProperties("bi4j.server")
-public record Bi4jServerProperties(@DefaultValue List<String> allowedHosts, @DefaultValue("true") boolean history, @DefaultValue("") String dataDir) {}
+public record Bi4jServerProperties(@DefaultValue List<String> allowedHosts, @DefaultValue("true") boolean history, @DefaultValue("") String dataDir, @DefaultValue("4") int maxLiveSessions) {}

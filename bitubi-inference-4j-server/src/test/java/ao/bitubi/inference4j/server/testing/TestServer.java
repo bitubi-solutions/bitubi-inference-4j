@@ -43,6 +43,10 @@ public final class TestServer implements AutoCloseable {
         this.port = Integer.parseInt(ctx.getEnvironment().getProperty("local.server.port"));
     }
 
+    public <T> T bean(Class<T> type) {
+        return context.getBean(type);
+    }
+
     public int port() {
         return port;
     }

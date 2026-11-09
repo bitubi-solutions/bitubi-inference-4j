@@ -18,8 +18,8 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class ServerBeans {
     @Bean(destroyMethod = "closeAll")
-    SessionRegistry sessionRegistry() {
-        return new SessionRegistry();
+    SessionRegistry sessionRegistry(Bi4jServerProperties props) {
+        return new SessionRegistry(props.maxLiveSessions());
     }
 
     @Bean(destroyMethod = "cancelAll")

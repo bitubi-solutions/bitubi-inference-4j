@@ -50,6 +50,7 @@ public final class TurnService {
         }
         UUID id = sessionId.get();
         if (!active.add(id)) throw new SessionBusyException(id);
+        sessions.markBusy(id);
         try {
             int lastAssistant = -1;
             for (int i = 0; i < messages.size(); i++) {
@@ -77,11 +78,16 @@ public final class TurnService {
             }
             ChatSession session = sessions.getOrCreate(id, bi4j, system, earlier);
             Generation g = session.start(String.join("\n\n", turn), settings);
-            return track(id, g, () -> active.remove(id));
+            return track(id, g, () -> release(id));
         } catch (RuntimeException e) {
-            active.remove(id);
+            release(id);
             throw e;
         }
+    }
+
+    private void release(UUID id) {
+        active.remove(id);
+        sessions.markIdle(id);
     }
 
     private Turn track(UUID id, Generation g, Runnable release) {

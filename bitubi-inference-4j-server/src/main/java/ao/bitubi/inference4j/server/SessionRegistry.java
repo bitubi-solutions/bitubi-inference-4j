@@ -26,7 +26,38 @@ import org.slf4j.LoggerFactory;
 /** Live chat sessions by conversation id (the {@code X-Bi4j-Session} value). */
 public final class SessionRegistry {
     private static final Logger log = LoggerFactory.getLogger(SessionRegistry.class);
+    static final int DEFAULT_MAX_LIVE = 4;
     private final Map<UUID, ChatSession> sessions = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> lastUsed = new ConcurrentHashMap<>();
+    private final java.util.Set<UUID> busy = ConcurrentHashMap.newKeySet();
+    private final int maxLive;
+    private final java.util.concurrent.atomic.AtomicLong clock = new java.util.concurrent.atomic.AtomicLong();
+
+    public SessionRegistry() {
+        this(DEFAULT_MAX_LIVE);
+    }
+
+    /** {@code maxLive}: how many sessions stay open; over it the least recently used idle one is closed (its KV cache freed). */
+    public SessionRegistry(int maxLive) {
+        this.maxLive = Math.max(1, maxLive);
+    }
+
+    /** A turn is running on this id: it is never evicted. */
+    public void markBusy(UUID id) {
+        busy.add(id);
+        markUsed(id);
+    }
+
+    /** The turn ended: the session may be evicted, and a cap that was exceeded while everything was busy shrinks back. */
+    public void markIdle(UUID id) {
+        busy.remove(id);
+        markUsed(id);
+        evictOverCap(null);
+    }
+
+    public void markUsed(UUID id) {
+        lastUsed.put(id, clock.incrementAndGet());
+    }
 
     /**
      * The session for {@code id}; a new one is seeded with {@code system} and {@code earlier} (prefill only). The
@@ -48,7 +79,27 @@ public final class SessionRegistry {
             }
         }
         sessions.put(id, s);
+        markUsed(id);
+        evictOverCap(id);
         return s;
+    }
+
+    private void evictOverCap(UUID keep) {
+        while (sessions.size() > maxLive) {
+            UUID victim = null;
+            long oldest = Long.MAX_VALUE;
+            for (UUID id : sessions.keySet()) {
+                if (id.equals(keep) || busy.contains(id)) continue;
+                long used = lastUsed.getOrDefault(id, 0L);
+                if (used < oldest) {
+                    oldest = used;
+                    victim = id;
+                }
+            }
+            if (victim == null) return; // everything is busy: exceed the cap rather than cut a running answer
+            log.info("closing idle session {} (more than {} live sessions)", victim, maxLive);
+            remove(victim);
+        }
     }
 
     public Optional<ChatSession> find(UUID id) {
@@ -57,6 +108,7 @@ public final class SessionRegistry {
 
     public void remove(UUID id) {
         ChatSession s = sessions.remove(id);
+        lastUsed.remove(id);
         if (s != null) s.close();
     }
 
@@ -73,5 +125,6 @@ public final class SessionRegistry {
             }
         });
         sessions.clear();
+        lastUsed.clear();
     }
 }

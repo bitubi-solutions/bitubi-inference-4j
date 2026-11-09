@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "bi4j.api.enabled", havingValue = "true", matchIfMissing = true)
 public class ModelsController {
     private final ModelHost host;
 

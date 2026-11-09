@@ -30,7 +30,7 @@ LOGBACK_CONFIG="./conf/logback.xml"
 
 BI4J_JVM_ARGS="$BI4J_JVM_ARGS -ea -server -Dstdout.encoding=UTF-8 -Djdk.incubator.vector.VECTOR_ACCESS_OOB_CHECK=0 --add-opens=jdk.incubator.vector/jdk.incubator.vector=ALL-UNNAMED --add-modules=jdk.incubator.vector --add-exports java.base/sun.nio.ch=ALL-UNNAMED --enable-preview --enable-native-access=ALL-UNNAMED \
  -XX:+UnlockDiagnosticVMOptions -XX:CompilerDirectivesFile=./inlinerules.json -XX:+AlignVector -XX:+UseStringDeduplication \
- -XX:+UseCompressedOops -XX:+UseCompressedClassPointers"
+ -XX:+UseCompressedOops"
         
 # Which jar runs, and where its AOT cache lives (next to it)
 if [[ -z "$BI4J_PREINSTALLED_JAR" ]]; then

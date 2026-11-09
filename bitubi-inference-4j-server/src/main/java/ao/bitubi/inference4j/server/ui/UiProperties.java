@@ -16,10 +16,15 @@ import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
-/** {@code bi4j.ui.*}. {@code orphanTimeout}: a running answer nobody watches is cancelled after this; {@code heartbeat}: SSE keep-alive. */
+/** {@code bi4j.ui.*}. {@code orphanTimeout}: a running answer nobody watches is cancelled after this; {@code heartbeat}: SSE keep-alive; {@code templateDir}: read templates from this folder and reload them on change (development). */
 @ConfigurationProperties("bi4j.ui")
 public record UiProperties(
     @DefaultValue("true") boolean enabled,
     @DefaultValue("30s") Duration orphanTimeout,
-    @DefaultValue("15s") Duration heartbeat
-) {}
+    @DefaultValue("15s") Duration heartbeat,
+    java.nio.file.Path templateDir,
+    @DefaultValue Defaults defaults
+) {
+    /** {@code bi4j.ui.defaults.*}: what a new conversation starts with (the settings panel can change it per conversation). */
+    public record Defaults(@DefaultValue("0.7") float temperature, @DefaultValue("512") int maxNewTokens, @DefaultValue("") String system) {}
+}

@@ -37,6 +37,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.databind.json.JsonMapper;
 
 @RestController
+@org.springframework.boot.autoconfigure.condition.ConditionalOnProperty(name = "bi4j.api.enabled", havingValue = "true", matchIfMissing = true)
 public class ChatCompletionsController {
     static final String SESSION_HEADER = "X-Bi4j-Session";
     private static final Logger log = LoggerFactory.getLogger(ChatCompletionsController.class);
