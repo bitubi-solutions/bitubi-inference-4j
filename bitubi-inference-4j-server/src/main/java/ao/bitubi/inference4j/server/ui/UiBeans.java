@@ -21,9 +21,13 @@ import ao.bitubi.inference4j.server.chat.ConversationStore;
 import ao.bitubi.inference4j.server.chat.FileConversationStore;
 import ao.bitubi.inference4j.server.chat.MarkdownRenderer;
 import ao.bitubi.inference4j.server.chat.MemoryConversationStore;
+import gg.jte.ContentType;
 import gg.jte.TemplateEngine;
+import gg.jte.resolve.DirectoryCodeResolver;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -38,9 +42,39 @@ public class UiBeans {
         return new MarkdownRenderer();
     }
 
+    /**
+     * The precompiled templates; with {@code bi4j.ui.template-dir} set (development only) they are read from that folder
+     * and recompiled when a file changes.
+     */
     @Bean
-    Templates templates(TemplateEngine engine) {
-        return new Templates(engine);
+    Templates templates(ObjectProvider<TemplateEngine> precompiled, UiProperties ui) {
+        Path dir = ui.templateDir();
+        if (dir == null) return new Templates(precompiled.getObject());
+        if (!Files.isDirectory(dir)) {
+            throw new IllegalStateException("bi4j.ui.template-dir \"" + dir + "\" is not a folder; unset it to use the built-in templates.");
+        }
+        return new Templates(devEngine(dir));
+    }
+
+    /** Compiles on demand from {@code dir}; the classes go to a temp folder and the compiler gets the classpath this JVM runs with. */
+    private static TemplateEngine devEngine(Path dir) {
+        try {
+            ClassLoader loader = Thread.currentThread().getContextClassLoader();
+            TemplateEngine engine = TemplateEngine.create(new DirectoryCodeResolver(dir), Files.createTempDirectory("bi4j-jte-"), ContentType.Html, loader);
+            java.util.LinkedHashSet<String> classpath = new java.util.LinkedHashSet<>(java.util.Arrays.asList(System.getProperty("java.class.path", "").split(java.io.File.pathSeparator)));
+            for (ClassLoader l = loader; l != null; l = l.getParent()) {
+                if (l instanceof java.net.URLClassLoader u) {
+                    for (java.net.URL url : u.getURLs()) {
+                        if ("file".equals(url.getProtocol())) classpath.add(Path.of(url.toURI()).toString());
+                    }
+                }
+            }
+            classpath.remove("");
+            engine.setClassPath(new java.util.ArrayList<>(classpath));
+            return engine;
+        } catch (java.io.IOException | java.net.URISyntaxException e) {
+            throw new IllegalStateException("cannot set up the template compiler for " + dir + ": " + e.getMessage(), e);
+        }
     }
 
     @Bean
