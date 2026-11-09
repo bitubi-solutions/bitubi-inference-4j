@@ -36,6 +36,22 @@
     if (e.target.closest('[data-close-panel]')) closePanel();
   });
 
+  // theme: cycles system, light, dark; theme.js (blocking, in <head>) does the work and keeps the choice
+  var NEXT = { system: 'light', light: 'dark', dark: 'system' };
+  function themeLabel() {
+    var button = document.getElementById('theme-toggle');
+    if (!button || !window.bi4jTheme) return;
+    var mode = window.bi4jTheme.mode();
+    button.textContent = 'Theme: ' + mode.charAt(0).toUpperCase() + mode.slice(1);
+  }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('#theme-toggle') && window.bi4jTheme) {
+      window.bi4jTheme.set(NEXT[window.bi4jTheme.mode()] || 'system');
+      themeLabel();
+    }
+  });
+  document.addEventListener('DOMContentLoaded', themeLabel);
+
   // copy buttons on code blocks (delegated, so they work on streamed content)
   document.addEventListener('click', function (e) {
     var copy = e.target.closest('[data-copy]');

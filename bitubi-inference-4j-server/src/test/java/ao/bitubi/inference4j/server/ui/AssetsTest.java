@@ -44,6 +44,21 @@ public class AssetsTest {
     }
 
     @Test
+    public void themeJsIsStrictSmallAndBlockingInTheHead() throws Exception {
+        String js = read("theme.js");
+        assertTrue(js.startsWith("'use strict';"));
+        for (String banned : new String[] { "eval(", "new Function", ".innerHTML", "document.write", "http://", "https://" }) assertFalse(js.contains(banned), banned);
+        try (ao.bitubi.inference4j.server.testing.TestServer s = ao.bitubi.inference4j.server.testing.TestServer.start(ao.bitubi.inference4j.server.ModelHost.ready(new ao.bitubi.inference4j.server.testing.FakeBi4j()))) {
+            var r = s.get("/theme.js");
+            assertEquals(200, r.statusCode());
+            assertTrue(r.headers().firstValue("Content-Type").orElse("").contains("javascript"), r.headers().toString());
+            org.jsoup.nodes.Element first = org.jsoup.Jsoup.parse(s.get("/").body()).head().selectFirst("script");
+            assertEquals("/theme.js", first.attr("src"), "theme.js is the first script of the head");
+            assertFalse(first.hasAttr("defer") || first.hasAttr("async"), "it must block, so the theme is set before the first paint");
+        }
+    }
+
+    @Test
     public void logosCarryNoScript() throws IOException {
         for (String f : new String[] { "logo.svg", "favicon.svg" }) {
             String svg = read(f);
