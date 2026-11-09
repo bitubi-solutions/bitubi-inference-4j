@@ -129,6 +129,8 @@ public class UiController {
         Conversation.Settings stored = store.load(uuid).map(Conversation::settings).orElse(models.defaults());
         int ctx = host.bi4j().map(b -> b.info().contextLength()).orElse(Integer.MAX_VALUE);
         Conversation.Settings use = new Conversation.Settings(stored.temperature(), Math.max(1, Math.min(ctx, stored.maxNewTokens())), stored.system());
+        boolean restoring = sessions.find(uuid).isEmpty() && store.load(uuid).map(x -> !x.messages().isEmpty()).orElse(false);
+        int replayTokens = restoring ? store.load(uuid).map(x -> x.messages().stream().mapToInt(m -> m.text().length() / 4 + 1).sum()).orElse(0) : 0;
         try {
             RunningTurn turn = chat.send(uuid, text, use);
             MessageModel user = new MessageModel("user", null, text, null, null, null);
@@ -136,6 +138,7 @@ public class UiController {
             params.put("conversationId", uuid);
             params.put("turnId", turn.id());
             params.put("userMessage", user);
+            params.put("notice", restoring ? "Restoring context (about " + replayTokens + " tokens)..." : "");
             return html(HttpStatus.OK, templates.render("sent", params));
         } catch (SessionBusyException e) {
             boolean running = chat.running(uuid).isPresent();
@@ -166,7 +169,11 @@ public class UiController {
                 if (running.isEmpty()) { // finished before the viewer arrived (or after a restart): tell what was stored
                     store.load(conversationId).flatMap(c -> c.messages().isEmpty() ? Optional.<Conversation.Msg>empty() : Optional.of(c.messages().get(c.messages().size() - 1)))
                         .ifPresent(m -> {
-                            if ("assistant".equals(m.role())) sendQuietly(emitter, null, finalHtml(conversationId, m, null));
+                            if ("assistant".equals(m.role())) {
+                                // arrived after the end: an interrupted answer still says so (the original message is not kept)
+                                Throwable late = "interrupted".equals(m.status()) ? new IllegalStateException("it was interrupted") : null;
+                                sendQuietly(emitter, null, finalHtml(conversationId, m, late));
+                            }
                             else { // the question was stored but the answer never was: the server restarted under this page
                                 Conversation.Msg lost = new Conversation.Msg("assistant", "", java.time.Instant.now(), null, null, null, null, "interrupted");
                                 sendQuietly(emitter, null, finalHtml(conversationId, lost, new IllegalStateException("the server restarted while answering. Reload the page to retry.")));
@@ -208,7 +215,7 @@ public class UiController {
         params.put("conversationId", conversationId);
         params.put("html", markdown.render(m.text()));
         params.put("footer", ViewModels.footer(m.finishReason(), m.generatedTokens(), m.tokensPerSecond(), m.status()));
-        params.put("error", error == null ? null : "The answer stopped early: " + error.getMessage());
+        params.put("error", error == null ? null : "The answer stopped early: " + error.getMessage() + ". Send the message again to retry.");
         params.put("groups", models.sidebar("", conversationId));
         params.put("contextLabel", after.context().label());
         params.put("contextWarn", after.context().warn());
@@ -323,8 +330,9 @@ public class UiController {
         }
         java.time.Instant now = java.time.Instant.now();
         String model = host.bi4j().map(b -> b.info().name()).orElse("");
-        Conversation base = c.orElseGet(() -> Conversation.create(uuid, model, next, now));
-        store.save(base.withSettings(next, now));
+        if (store.update(uuid, cur -> cur.withSettings(next, java.time.Instant.now())).isEmpty()) {
+            store.save(Conversation.create(uuid, model, next, now));
+        }
         String note = "Saved.";
         if (systemChanged && hasMessages) {
             sessions.remove(uuid);
@@ -366,7 +374,8 @@ public class UiController {
         String clean = title.strip().replaceAll("\\s+", " ");
         Optional<Conversation> c = store.load(uuid);
         if (clean.isEmpty() || c.isEmpty()) return html(HttpStatus.BAD_REQUEST, templates.render("renameForm", Map.of("item", models.item(uuid, null))));
-        store.save(c.get().withTitle(clean.length() > 120 ? clean.substring(0, 120) : clean, java.time.Instant.now()));
+        String newTitle = clean.length() > 120 ? clean.substring(0, 120) : clean;
+        store.update(uuid, cur -> cur.withTitle(newTitle, java.time.Instant.now()));
         return html(HttpStatus.OK, templates.render("sidebarItem", Map.of("item", models.item(uuid, currentId(current)))));
     }
 

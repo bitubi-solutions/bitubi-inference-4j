@@ -71,8 +71,10 @@ public final class SessionRegistry {
             if (system != null) o.system(system);
         });
         if (!earlier.isEmpty()) {
+            long started = System.nanoTime();
             try {
                 s.restore(earlier);
+                log.info("restored {} messages of {} in {} ms", earlier.size(), id, (System.nanoTime() - started) / 1_000_000);
             } catch (RuntimeException e) {
                 s.close();
                 throw e;

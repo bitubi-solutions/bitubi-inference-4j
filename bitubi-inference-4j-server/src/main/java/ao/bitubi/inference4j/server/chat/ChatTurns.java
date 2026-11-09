@@ -82,9 +82,19 @@ public final class ChatTurns implements AutoCloseable {
         messages.add(Message.user(text));
         GenerationSettings gs = GenerationSettings.defaults().withTemperature(settings.temperature()).withMaxNewTokens(settings.maxNewTokens());
 
-        Turn turn = turns.start(Optional.of(conversationId), messages, gs);
+        // Registered before the session is reserved: a second send during a slow restore finds something to link to.
         RunningTurn rt = new RunningTurn(conversationId);
-        running.put(conversationId, rt);
+        if (running.putIfAbsent(conversationId, rt) != null) throw new ao.bitubi.inference4j.sdk.SessionBusyException(conversationId);
+        Turn turn;
+        try {
+            turn = turns.start(Optional.of(conversationId), messages, gs);
+        } catch (RuntimeException e) {
+            running.remove(conversationId, rt);
+            rt.rejected.set(true);
+            rt.userStored.complete(null);
+            rt.finish(new RunningTurn.Final(new Conversation.Msg("assistant", "", clock.instant(), null, null, null, null, "interrupted"), e));
+            throw e;
+        }
         sdkTurns.put(rt.id(), turn);
         Conversation base = c.withSettings(settings, clock.instant());
         Thread.ofVirtual().name("bi4j-turn-" + rt.id()).start(() -> run(rt, turn, base, text));
@@ -106,7 +116,8 @@ public final class ChatTurns implements AutoCloseable {
         Conversation.Msg sent = Conversation.Msg.user(text, clock.instant(), "pending");
         List<Conversation.Msg> before = c.messages();
         boolean retry = !before.isEmpty() && isLostCopyOf(before.get(before.size() - 1), text);
-        store.save(retry ? base.withLastMessage(sent, clock.instant()) : base.withMessage(sent, clock.instant()));
+        java.util.function.UnaryOperator<Conversation> addSent = cur -> retry ? cur.withSettings(settings, clock.instant()).withLastMessage(sent, clock.instant()) : cur.withSettings(settings, clock.instant()).withMessage(sent, clock.instant());
+        if (store.update(conversationId, addSent).isEmpty()) store.save(addSent.apply(base));
         rt.userStored.complete(null);
         return rt;
     }
@@ -167,18 +178,18 @@ public final class ChatTurns implements AutoCloseable {
             }
             rt.awaitUserStored();
             try {
-                Optional<Conversation> stored = store.load(base.id());
+                Conversation.Msg answer = assistant;
+                Optional<Conversation> stored = store.update(base.id(), cur -> {
+                    Conversation done = cur;
+                    int lastIndex = done.messages().size() - 1;
+                    if (lastIndex >= 0 && "user".equals(done.messages().get(lastIndex).role())) {
+                        done = done.withLastMessage(done.messages().get(lastIndex).withStatus(null), clock.instant());
+                    }
+                    return done.withMessage(answer, clock.instant());
+                });
                 if (stored.isEmpty()) { // deleted while it was answering: it stays deleted
                     log.info("{} was deleted during the answer; not storing it", base.id());
-                    rt.finish(new RunningTurn.Final(assistant, error));
-                    return;
                 }
-                Conversation done = stored.get();
-                int lastIndex = done.messages().size() - 1;
-                if (lastIndex >= 0 && "user".equals(done.messages().get(lastIndex).role())) {
-                    done = done.withLastMessage(done.messages().get(lastIndex).withStatus(null), clock.instant());
-                }
-                store.save(done.withMessage(assistant, clock.instant()));
             } catch (RuntimeException e) {
                 log.warn("cannot store the answer of {}: {}", base.id(), e.toString());
             }

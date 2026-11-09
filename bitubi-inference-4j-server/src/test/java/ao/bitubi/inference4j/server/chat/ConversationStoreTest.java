@@ -80,4 +80,37 @@ public class ConversationStoreTest {
         assertNull(c.messages().get(0).status());
         assertEquals(1, c.messages().size());
     }
+
+    @ParameterizedTest
+    @MethodSource("stores")
+    void concurrentUpdatesOfOneConversationAreNotLost(Supplier<ConversationStore> make) throws Exception {
+        ConversationStore store = make.get();
+        UUID id = UUID.randomUUID();
+        store.save(sample(id, T0));
+        int threads = 32;
+        java.util.concurrent.ExecutorService pool = java.util.concurrent.Executors.newFixedThreadPool(threads);
+        java.util.concurrent.CountDownLatch go = new java.util.concurrent.CountDownLatch(1);
+        List<java.util.concurrent.Future<?>> done = new java.util.ArrayList<>();
+        for (int i = 0; i < threads; i++) {
+            int n = i;
+            done.add(pool.submit(() -> {
+                go.await();
+                store.update(id, c -> c.withMessage(Conversation.Msg.user("m" + n, T0, null), T0));
+                return null;
+            }));
+        }
+        go.countDown();
+        for (var f : done) f.get();
+        pool.shutdown();
+        assertEquals(2 + threads, store.load(id).orElseThrow().messages().size());
+    }
+
+    @ParameterizedTest
+    @MethodSource("stores")
+    void updateOfAMissingConversationDoesNothing(Supplier<ConversationStore> make) {
+        ConversationStore store = make.get();
+        UUID id = UUID.randomUUID();
+        assertTrue(store.update(id, c -> c.withTitle("x", T0)).isEmpty());
+        assertTrue(store.load(id).isEmpty());
+    }
 }

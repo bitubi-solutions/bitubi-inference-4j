@@ -262,4 +262,45 @@ public class ChatTurnsTest {
         assertEquals(2, m.size());
         assertNull(m.get(0).status());
     }
+
+    @Test
+    public void aRenameRacingTheEndOfAnAnswerKeepsBoth() throws Exception {
+        for (int i = 0; i < 40; i++) {
+            fake.script("ok").delayMs(0);
+            UUID id = UUID.randomUUID();
+            RunningTurn t = chat.send(id, "hi", SETTINGS);
+            store.update(id, c -> c.withTitle("Renamed", Instant.now()));
+            awaitDone(t);
+            Conversation c = store.load(id).orElseThrow();
+            assertEquals("Renamed", c.title(), "round " + i);
+            assertEquals(2, c.messages().size(), "round " + i);
+            assertEquals("assistant", c.messages().get(1).role());
+        }
+    }
+
+    @Test
+    public void aSecondSendDuringARestoreCanLinkToTheRunningAnswer() throws Exception {
+        java.util.concurrent.CountDownLatch gate = new java.util.concurrent.CountDownLatch(1);
+        fake.blockRestoreOn(gate);
+        UUID id = UUID.randomUUID();
+        Instant now = Instant.now();
+        store.save(Conversation.create(id, "fake/model", SETTINGS, now)
+            .withMessage(Conversation.Msg.user("one", now, null), now)
+            .withMessage(new Conversation.Msg("assistant", "ok", now, "STOP", 1, 1, 1.0, null), now));
+        var first = java.util.concurrent.CompletableFuture.supplyAsync(() -> chat.send(id, "two", SETTINGS));
+        try {
+            await(() -> {
+                try {
+                    chat.send(id, "again", SETTINGS);
+                    return false;
+                } catch (ao.bitubi.inference4j.sdk.SessionBusyException busy) {
+                    return true;
+                }
+            });
+            assertTrue(chat.running(id).isPresent(), "the 409 needs something to link to, even while the context is being restored");
+        } finally {
+            gate.countDown();
+        }
+        awaitDone(first.get(10, java.util.concurrent.TimeUnit.SECONDS));
+    }
 }

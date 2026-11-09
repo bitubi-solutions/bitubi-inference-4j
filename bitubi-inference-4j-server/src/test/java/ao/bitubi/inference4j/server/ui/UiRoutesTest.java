@@ -380,4 +380,42 @@ public class UiRoutesTest {
             Thread.sleep(300);
         }
     }
+
+    @Test
+    public void anUnknownPageIsANiceNotFoundButTheApiKeepsItsJsonError() throws Exception {
+        var page = server.get("/no/such/page", "Accept", "text/html");
+        assertEquals(404, page.statusCode());
+        assertTrue(page.headers().firstValue("Content-Type").orElse("").startsWith("text/html"));
+        Document d = doc(page);
+        assertEquals(1, d.select("h1").size());
+        assertNotNull(d.selectFirst("a[href='/']"));
+        assertFalse(page.body().contains("Exception") || page.body().contains("at ao."), "no stack trace");
+        var api = server.get("/v1/nope");
+        assertEquals(404, api.statusCode());
+        assertTrue(api.body().contains("\"error\""), api.body());
+    }
+
+    @Test
+    public void theFirstSendAfterARestartSaysTheContextIsBeingRestored() throws Exception {
+        UUID id = UUID.randomUUID();
+        Instant now = Instant.now();
+        new FileConversationStore(dir).save(Conversation.create(id, "fake/model", UiModels.DEFAULT_SETTINGS, now)
+            .withMessage(Conversation.Msg.user("an earlier question", now, null), now)
+            .withMessage(new Conversation.Msg("assistant", "an earlier answer", now, "STOP", 3, 3, 10.0, null), now));
+        try (TestServer s = TestServer.start(ModelHost.ready(fake), "bi4j.server.history=true", "bi4j.server.data-dir=" + dir)) {
+            var first = send(s, id, "and now?");
+            assertTrue(doc(first).selectFirst("#status-live").text().startsWith("Restoring context"), first.body());
+            events(s, id, turnOf(first));
+            var second = send(s, id, "and again?");
+            assertFalse(doc(second).selectFirst("#status-live").text().contains("Restoring"), "the session is live now");
+        }
+    }
+
+    @Test
+    public void anAnswerThatStoppedEarlyTellsWhatToDo() throws Exception {
+        fake.script("a", "b", "c", "d").failAt(2, new IllegalStateException("boom"));
+        UUID id = UUID.randomUUID();
+        var evs = events(server, id, turnOf(send(server, id, "go")));
+        assertTrue(evs.stream().anyMatch(e -> e.data().contains("The answer stopped early") && e.data().contains("Send the message again")), evs.toString());
+    }
 }

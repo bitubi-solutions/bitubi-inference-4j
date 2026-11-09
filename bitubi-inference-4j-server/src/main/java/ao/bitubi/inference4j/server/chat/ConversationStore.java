@@ -28,6 +28,20 @@ public interface ConversationStore {
 
     void delete(UUID id);
 
+    /**
+     * Changes a stored conversation: load, apply {@code change}, save. Empty (and nothing is written) when there is no such
+     * conversation. Concurrent updates of one conversation do not lose each other's changes.
+     */
+    default Optional<Conversation> update(UUID id, java.util.function.UnaryOperator<Conversation> change) {
+        synchronized (IdLocks.of(id)) {
+            Optional<Conversation> c = load(id);
+            if (c.isEmpty()) return c;
+            Conversation next = change.apply(c.get());
+            save(next);
+            return Optional.of(next);
+        }
+    }
+
     /** False after a failed save, true again after a successful one. */
     boolean writable();
 
