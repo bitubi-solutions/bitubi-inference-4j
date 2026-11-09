@@ -61,6 +61,9 @@ later `./run-cli.sh` launch uses it while it is newer than the jar:
 ./run-cli.sh --create-aot tjake/Llama-3.2-1B-Instruct-JQ4
 ```
 
+The full guide (UI, API, every setting, security, troubleshooting) is [docs/server.md](docs/server.md); to extend the UI see
+[docs/server-extending.md](docs/server-extending.md) and run `./dev-server.sh` (no model needed).
+
 Chat history is kept as plain text in `~/.bi4j` (`--data-dir` changes it, `--no-history` keeps nothing on disk).
 
 ```
