@@ -7,7 +7,14 @@
     <header class="top">
       <h1 class="model-name">${page.model().name()}</h1>
       <span id="model-info" class="model-info">${page.model().info()}</span>
+      @if(page.chat() != null)
+        <button type="button" id="settings-open" class="header-btn" aria-expanded="false" aria-controls="settings-panel" hx-get="/c/${page.chat().id().toString()}/settings" hx-target="#settings-body" hx-swap="innerHTML">Settings</button>
+      @endif
     </header>
+    <aside id="settings-panel" class="drawer" aria-label="Settings" tabindex="-1">
+      <button type="button" class="drawer-close" data-close-panel aria-label="Close settings">Close</button>
+      <div id="settings-body"></div>
+    </aside>
     <div id="content">
       @if(page.model().ready())
         @template.chat(chat = page.chat())

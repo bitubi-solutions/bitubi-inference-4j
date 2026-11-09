@@ -135,6 +135,26 @@ dialog.confirm::backdrop { background: rgba(11, 16, 32, 0.55); }
   .starters { padding-top: 1.5rem; }
 }
 
+/* settings: a right-hand drawer, a bottom sheet on narrow screens */
+.header-btn { margin-left: auto; min-height: 44px; padding: 0.4rem 0.9rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); cursor: pointer; }
+.header-btn:hover { border-color: var(--accent); }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(24rem, 100vw); z-index: 20; padding: 1rem 1.25rem; overflow-y: auto; background: var(--surface); color: var(--ink); border-left: 1px solid var(--line); box-shadow: -8px 0 24px rgba(11, 16, 32, 0.18); transform: translateX(100%); visibility: hidden; transition: transform 0.2s ease, visibility 0.2s; }
+.drawer.open { transform: none; visibility: visible; }
+.drawer-close { float: right; min-height: 44px; padding: 0.4rem 0.9rem; border: 1px solid var(--line); border-radius: var(--radius); background: transparent; color: var(--ink); cursor: pointer; }
+.settings { display: grid; gap: 0.5rem; clear: both; }
+.settings h2 { font-size: 1.1rem; margin: 0 0 0.25rem; }
+.settings label { font-weight: 600; font-size: 0.9rem; margin-top: 0.4rem; }
+.settings input, .settings textarea { width: 100%; min-height: 44px; padding: 0.5rem 0.7rem; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+.settings .actions { display: flex; gap: 0.6rem; margin-top: 0.6rem; }
+.settings .actions button { min-height: 44px; padding: 0.4rem 1rem; border-radius: var(--radius); border: 1px solid var(--line); cursor: pointer; background: transparent; color: var(--ink); }
+.settings .actions .primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.form-error { color: var(--danger, #b42318); font-size: 0.9rem; }
+@media (max-width: 767px) {
+  .drawer { top: auto; left: 0; width: auto; max-height: 80vh; border-left: 0; border-top: 1px solid var(--line); box-shadow: 0 -8px 24px rgba(11, 16, 32, 0.18); transform: translateY(100%); }
+  .drawer.open { transform: none; }
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .drawer { transition: none; }
   .answer[aria-busy="true"]::before { animation: none; }
 }

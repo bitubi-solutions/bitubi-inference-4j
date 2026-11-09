@@ -13,6 +13,29 @@
     el.style.height = Math.min(el.scrollHeight, 192) + 'px';
   }
 
+  // the settings panel: a drawer opened by the header button, closed by its own button or Esc
+  function panel() { return document.getElementById('settings-panel'); }
+  function openPanel(button) {
+    var p = panel();
+    if (!p) return;
+    p.classList.add('open');
+    button.setAttribute('aria-expanded', 'true');
+    p.focus();
+  }
+  function closePanel() {
+    var p = panel();
+    var button = document.getElementById('settings-open');
+    if (!p || !p.classList.contains('open')) return false;
+    p.classList.remove('open');
+    if (button) { button.setAttribute('aria-expanded', 'false'); button.focus(); }
+    return true;
+  }
+  document.addEventListener('click', function (e) {
+    var opener = e.target.closest('#settings-open');
+    if (opener) { var p = panel(); if (p && p.classList.contains('open')) closePanel(); else openPanel(opener); return; }
+    if (e.target.closest('[data-close-panel]')) closePanel();
+  });
+
   // copy buttons on code blocks (delegated, so they work on streamed content)
   document.addEventListener('click', function (e) {
     var copy = e.target.closest('[data-copy]');
@@ -61,6 +84,7 @@
       return;
     }
     if (e.key === 'Escape') {
+      if (closePanel()) return;
       var stop = document.getElementById('stop');
       var rename = t && t.matches && t.matches('[data-rename-input]') ? t : null;
       if (rename) {
