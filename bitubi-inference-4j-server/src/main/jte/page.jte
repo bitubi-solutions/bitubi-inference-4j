@@ -1,10 +1,12 @@
 @import ao.bitubi.inference4j.server.ui.ViewModels.PageModel
 @param PageModel page
 @template.layout(title = page.pageTitle(), body = @`
-<div class="app">
+<div class="app" id="app">
   @template.sidebar(groups = page.sidebar(), query = page.query(), historyWritable = page.historyWritable(), historyError = page.historyError())
+  <div id="backdrop" class="backdrop"></div>
   <div class="main">
     <header class="top">
+      <button type="button" id="sidebar-toggle" class="header-btn menu-btn" aria-expanded="false" aria-controls="sidebar">Menu</button>
       <h1 class="model-name">${page.model().name()}</h1>
       <span id="model-info" class="model-info">${page.model().info()}</span>
       <div class="top-actions">

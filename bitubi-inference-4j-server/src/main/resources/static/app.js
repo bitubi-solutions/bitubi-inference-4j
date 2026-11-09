@@ -13,6 +13,30 @@
     el.style.height = Math.min(el.scrollHeight, 192) + 'px';
   }
 
+  // the sidebar drawer on narrow screens
+  function appRoot() { return document.getElementById('app'); }
+  function openSidebar(button) {
+    var app = appRoot();
+    if (!app) return;
+    app.classList.add('sidebar-open');
+    button.setAttribute('aria-expanded', 'true');
+    var first = document.querySelector('#sidebar .new-chat');
+    if (first) first.focus();
+  }
+  function closeSidebar() {
+    var app = appRoot();
+    var button = document.getElementById('sidebar-toggle');
+    if (!app || !app.classList.contains('sidebar-open')) return false;
+    app.classList.remove('sidebar-open');
+    if (button) { button.setAttribute('aria-expanded', 'false'); button.focus(); }
+    return true;
+  }
+  document.addEventListener('click', function (e) {
+    var toggle = e.target.closest('#sidebar-toggle');
+    if (toggle) { if (appRoot() && appRoot().classList.contains('sidebar-open')) closeSidebar(); else openSidebar(toggle); return; }
+    if (e.target.id === 'backdrop') closeSidebar();
+  });
+
   // the settings panel: a drawer opened by the header button, closed by its own button or Esc
   function panel() { return document.getElementById('settings-panel'); }
   function openPanel(button) {
@@ -100,7 +124,7 @@
       return;
     }
     if (e.key === 'Escape') {
-      if (closePanel()) return;
+      if (closePanel() || closeSidebar()) return;
       var stop = document.getElementById('stop');
       var rename = t && t.matches && t.matches('[data-rename-input]') ? t : null;
       if (rename) {
