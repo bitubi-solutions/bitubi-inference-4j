@@ -51,13 +51,20 @@ final class UiModels {
     private final MarkdownRenderer markdown;
     private final Clock clock;
 
-    UiModels(ConversationStore store, ChatTurns chat, SessionRegistry sessions, ModelHost host, MarkdownRenderer markdown, Clock clock) {
+    private final Conversation.Settings defaults;
+
+    UiModels(ConversationStore store, ChatTurns chat, SessionRegistry sessions, ModelHost host, MarkdownRenderer markdown, Clock clock, Conversation.Settings defaults) {
+        this.defaults = defaults;
         this.store = store;
         this.chat = chat;
         this.sessions = sessions;
         this.host = host;
         this.markdown = markdown;
         this.clock = clock;
+    }
+
+    Conversation.Settings defaults() {
+        return defaults;
     }
 
     ModelStatus status() {
@@ -83,7 +90,7 @@ final class UiModels {
         boolean readOnly = total > 0 && used + MIN_ROOM > total;
         List<MessageModel> messages = new ArrayList<>();
         String banner = null;
-        Conversation.Settings settings = DEFAULT_SETTINGS;
+        Conversation.Settings settings = defaults;
         String title = "";
         if (c != null) {
             title = c.title();

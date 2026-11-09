@@ -27,6 +27,7 @@ public final class FakeBi4j implements Bi4j {
     private volatile List<String> script = List.of("Hello");
     private volatile long delayMs;
     private volatile long startDelayMs;
+    private volatile GenerationSettings lastSettings;
     private volatile int failIndex = -1;
     private volatile RuntimeException failure;
     private volatile int contextLimit = 4096;
@@ -44,6 +45,11 @@ public final class FakeBi4j implements Bi4j {
     public FakeBi4j startDelayMs(long ms) {
         this.startDelayMs = ms;
         return this;
+    }
+
+    /** The settings of the most recent session turn (null before any). */
+    public GenerationSettings lastSettings() {
+        return lastSettings;
     }
 
     public FakeBi4j delayMs(long ms) {
@@ -172,6 +178,7 @@ public final class FakeBi4j implements Bi4j {
         @Override
         public Generation start(String userText, GenerationSettings settings) {
             if (!busy.compareAndSet(false, true)) throw new SessionBusyException(id);
+            lastSettings = settings;
             return new Gen(this, userText, settings);
         }
 

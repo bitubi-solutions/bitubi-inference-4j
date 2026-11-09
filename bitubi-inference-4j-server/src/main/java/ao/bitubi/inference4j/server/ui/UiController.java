@@ -41,6 +41,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -58,6 +59,7 @@ public class UiController {
     private final MarkdownRenderer markdown;
     private final Templates templates;
     private final UiProperties props;
+    private final SessionRegistry sessions;
     private final UiModels models;
 
     UiController(
@@ -75,7 +77,9 @@ public class UiController {
         this.markdown = markdown;
         this.templates = templates;
         this.props = props;
-        this.models = new UiModels(store, chat, sessions, host, markdown, Clock.systemDefaultZone());
+        this.sessions = sessions;
+        UiProperties.Defaults d = props.defaults();
+        this.models = new UiModels(store, chat, sessions, host, markdown, Clock.systemDefaultZone(), new Conversation.Settings(d.temperature(), d.maxNewTokens(), d.system()));
     }
 
     // ---- pages -----------------------------------------------------------------------------------------------
@@ -117,19 +121,16 @@ public class UiController {
     @PostMapping("/c/{id}/messages")
     ResponseEntity<String> send(
         @PathVariable String id,
-        @RequestParam(name = "text", defaultValue = "") String text,
-        @RequestParam(name = "temperature", required = false) Float temperature,
-        @RequestParam(name = "maxTokens", required = false) Integer maxTokens
+        @RequestParam(name = "text", defaultValue = "") String text
     ) {
         UUID uuid = parse(id);
         if (uuid == null) return notFound();
         if (text.isBlank()) return alert(HttpStatus.BAD_REQUEST, "Type a message first.", null, null);
-        Conversation.Settings stored = store.load(uuid).map(Conversation::settings).orElse(UiModels.DEFAULT_SETTINGS);
-        float t = temperature == null ? stored.temperature() : Math.max(0f, Math.min(2f, temperature));
+        Conversation.Settings stored = store.load(uuid).map(Conversation::settings).orElse(models.defaults());
         int ctx = host.bi4j().map(b -> b.info().contextLength()).orElse(Integer.MAX_VALUE);
-        int max = maxTokens == null ? stored.maxNewTokens() : Math.max(1, Math.min(ctx, maxTokens));
+        Conversation.Settings use = new Conversation.Settings(stored.temperature(), Math.max(1, Math.min(ctx, stored.maxNewTokens())), stored.system());
         try {
-            RunningTurn turn = chat.send(uuid, text, new Conversation.Settings(t, max, stored.system()));
+            RunningTurn turn = chat.send(uuid, text, use);
             MessageModel user = new MessageModel("user", null, text, null, null, null);
             Map<String, Object> params = new HashMap<>();
             params.put("conversationId", uuid);
@@ -263,6 +264,85 @@ public class UiController {
         UUID t = parse(turn);
         if (c != null && t != null) chat.stop(c, t);
         return ResponseEntity.noContent().build();
+    }
+
+    // ---- settings -----------------------------------------------------------------------------------------------
+
+    @GetMapping("/c/{id}/settings")
+    ResponseEntity<String> settings(@PathVariable String id) {
+        UUID uuid = parse(id);
+        if (uuid == null) return notFound();
+        return settingsFragment(HttpStatus.OK, uuid, store.load(uuid).map(Conversation::settings).orElse(models.defaults()), null, null);
+    }
+
+    @PutMapping("/c/{id}/settings")
+    ResponseEntity<String> saveSettings(
+        @PathVariable String id,
+        @RequestParam(name = "temperature", defaultValue = "") String temperature,
+        @RequestParam(name = "maxTokens", defaultValue = "") String maxTokens,
+        @RequestParam(name = "system", defaultValue = "") String system
+    ) {
+        UUID uuid = parse(id);
+        if (uuid == null) return notFound();
+        Conversation.Settings current = store.load(uuid).map(Conversation::settings).orElse(models.defaults());
+        float t;
+        int max;
+        try {
+            t = Float.parseFloat(temperature.strip());
+        } catch (NumberFormatException e) {
+            return settingsFragment(HttpStatus.BAD_REQUEST, uuid, current, null, "Temperature must be a number between 0 and 2.");
+        }
+        if (!(t >= 0f && t <= 2f)) return settingsFragment(HttpStatus.BAD_REQUEST, uuid, current, null, "Temperature must be between 0 and 2.");
+        int ctx = host.bi4j().map(b -> b.info().contextLength()).orElse(Integer.MAX_VALUE);
+        try {
+            max = Integer.parseInt(maxTokens.strip());
+        } catch (NumberFormatException e) {
+            return settingsFragment(HttpStatus.BAD_REQUEST, uuid, current, null, "Max new tokens must be a whole number between 1 and " + ctx + ".");
+        }
+        if (max < 1 || max > ctx) return settingsFragment(HttpStatus.BAD_REQUEST, uuid, current, null, "Max new tokens must be between 1 and " + ctx + ".");
+        String sys = system.replace("\r\n", "\n").strip();
+        if (sys.length() > 8000) return settingsFragment(HttpStatus.BAD_REQUEST, uuid, current, null, "The system prompt can have at most 8,000 characters.");
+        return applySettings(uuid, current, new Conversation.Settings(t, max, sys));
+    }
+
+    @DeleteMapping("/c/{id}/settings")
+    ResponseEntity<String> resetSettings(@PathVariable String id) {
+        UUID uuid = parse(id);
+        if (uuid == null) return notFound();
+        Conversation.Settings current = store.load(uuid).map(Conversation::settings).orElse(models.defaults());
+        return applySettings(uuid, current, models.defaults());
+    }
+
+    /** Stores the settings with the conversation. A new system prompt on a conversation that has messages drops the live session so the next turn rebuilds it. */
+    private ResponseEntity<String> applySettings(UUID uuid, Conversation.Settings current, Conversation.Settings next) {
+        Optional<Conversation> c = store.load(uuid);
+        boolean systemChanged = !java.util.Objects.equals(current.system() == null ? "" : current.system(), next.system() == null ? "" : next.system());
+        boolean hasMessages = c.map(x -> !x.messages().isEmpty()).orElse(false);
+        if (systemChanged && hasMessages && chat.running(uuid).isPresent()) {
+            return settingsFragment(HttpStatus.CONFLICT, uuid, current, null, "The conversation is answering. Change the system prompt when the answer has finished.");
+        }
+        java.time.Instant now = java.time.Instant.now();
+        String model = host.bi4j().map(b -> b.info().name()).orElse("");
+        Conversation base = c.orElseGet(() -> Conversation.create(uuid, model, next, now));
+        store.save(base.withSettings(next, now));
+        String note = "Saved.";
+        if (systemChanged && hasMessages) {
+            sessions.remove(uuid);
+            note = "Saved. System prompt changed: the next answer starts from the stored history with the new prompt.";
+        }
+        return settingsFragment(HttpStatus.OK, uuid, next, note, null);
+    }
+
+    private ResponseEntity<String> settingsFragment(HttpStatus status, UUID uuid, Conversation.Settings s, String note, String error) {
+        Map<String, Object> params = new HashMap<>();
+        params.put("conversationId", uuid);
+        params.put("temperature", String.valueOf(s.temperature()));
+        params.put("maxTokens", s.maxNewTokens());
+        params.put("maxContext", host.bi4j().map(b -> b.info().contextLength()).orElse(8192));
+        params.put("system", s.system() == null ? "" : s.system());
+        params.put("note", note);
+        params.put("error", error);
+        return html(status, templates.render("settings", params));
     }
 
     // ---- rename, delete ---------------------------------------------------------------------------------------
