@@ -152,6 +152,18 @@ dialog.confirm::backdrop { background: rgba(11, 16, 32, 0.55); }
 /* the suggestions are for an empty chat only */
 #chat:has(#messages li) .starters { display: none; }
 
+.link-btn { align-self: flex-start; min-height: 44px; padding: 0.4rem 0.2rem; border: 0; background: transparent; color: #7dd3fc; text-decoration: underline; cursor: pointer; }
+.app.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
+.app.sidebar-collapsed #sidebar { display: none; }
+dialog.sheet { border: 0; border-radius: var(--radius); padding: 1.25rem; max-width: 34rem; width: calc(100vw - 2rem); color: var(--ink); background: var(--surface); }
+dialog.sheet::backdrop { background: rgba(11, 16, 32, 0.55); }
+dialog.sheet h2 { font-size: 1.1rem; margin-bottom: 0.75rem; }
+dialog.sheet table { border-collapse: collapse; width: 100%; margin-bottom: 1rem; }
+dialog.sheet th, dialog.sheet td { padding: 0.45rem 0.5rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); font-weight: 400; }
+dialog.sheet th { white-space: nowrap; }
+dialog.sheet button { min-height: 44px; padding: 0.4rem 1rem; border-radius: var(--radius); border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+kbd { font-family: var(--mono); font-size: 0.85em; padding: 0.1em 0.4em; border: 1px solid var(--line); border-radius: 4px; background: var(--code-inline); }
+
 /* narrow screens: the sidebar is a drawer behind the Menu button */
 .menu-btn { display: none; }
 .backdrop { display: none; }

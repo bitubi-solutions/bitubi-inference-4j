@@ -59,6 +59,19 @@ public class AssetsTest {
     }
 
     @Test
+    public void theShortcutListShowsExactlyTheActionsTheScriptHandles() throws Exception {
+        java.util.Set<String> inScript = new java.util.TreeSet<>();
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("'([a-z-]+)': function").matcher(read("app.js").substring(read("app.js").indexOf("var ACTIONS")));
+        while (m.find()) inScript.add(m.group(1));
+        try (ao.bitubi.inference4j.server.testing.TestServer s = ao.bitubi.inference4j.server.testing.TestServer.start(ao.bitubi.inference4j.server.ModelHost.ready(new ao.bitubi.inference4j.server.testing.FakeBi4j()))) {
+            java.util.Set<String> listed = new java.util.TreeSet<>();
+            org.jsoup.Jsoup.parse(s.get("/").body()).select("dialog#shortcuts tr[data-action]").forEach(r -> listed.add(r.attr("data-action")));
+            assertFalse(listed.isEmpty());
+            assertEquals(inScript, listed, "the list in the dialog and the handlers in app.js must not drift");
+        }
+    }
+
+    @Test
     public void logosCarryNoScript() throws IOException {
         for (String f : new String[] { "logo.svg", "favicon.svg" }) {
             String svg = read(f);

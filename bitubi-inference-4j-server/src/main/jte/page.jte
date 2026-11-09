@@ -4,6 +4,7 @@
 <div class="app" id="app">
   @template.sidebar(groups = page.sidebar(), query = page.query(), historyWritable = page.historyWritable(), historyError = page.historyError())
   <div id="backdrop" class="backdrop"></div>
+  @template.shortcuts()
   <div class="main">
     <header class="top">
       <button type="button" id="sidebar-toggle" class="header-btn menu-btn" aria-expanded="false" aria-controls="sidebar">Menu</button>

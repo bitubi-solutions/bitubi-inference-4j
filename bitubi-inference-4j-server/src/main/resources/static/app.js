@@ -60,6 +60,71 @@
     if (e.target.closest('[data-close-panel]')) closePanel();
   });
 
+  // keyboard shortcuts. ACTIONS and KEYS are the whole list; the dialog in shortcuts.jte shows the same actions
+  // (a test fails if they drift).
+  function narrow() { return window.matchMedia && window.matchMedia('(max-width: 767px)').matches; }
+  function toggleSidebar(wantOpen) {
+    var app = appRoot();
+    if (!app) return;
+    if (narrow()) {
+      var open = app.classList.contains('sidebar-open');
+      if (wantOpen === open) return;
+      if (open) closeSidebar(); else openSidebar(document.getElementById('sidebar-toggle'));
+    } else {
+      var hidden = app.classList.contains('sidebar-collapsed');
+      if (wantOpen === !hidden) return;
+      app.classList.toggle('sidebar-collapsed', !wantOpen);
+    }
+  }
+  var ACTIONS = {
+    'new-chat': function () {
+      var link = document.querySelector('#sidebar .new-chat');
+      window.location.href = link ? link.getAttribute('href') : '/';
+    },
+    'filter': function () {
+      toggleSidebar(true);
+      var input = document.querySelector('#search input');
+      if (input) input.focus();
+    },
+    'toggle-sidebar': function () {
+      var app = appRoot();
+      var shown = app && (narrow() ? app.classList.contains('sidebar-open') : !app.classList.contains('sidebar-collapsed'));
+      toggleSidebar(!shown);
+    },
+    'help': function () {
+      var dialog = document.getElementById('shortcuts');
+      if (dialog && dialog.showModal && !dialog.open) dialog.showModal();
+    }
+  };
+  var KEYS = [
+    { action: 'new-chat', mod: true, shift: true, key: 'o' },
+    { action: 'filter', mod: true, shift: false, key: 'k' },
+    { action: 'toggle-sidebar', mod: true, shift: true, key: 's' },
+    { action: 'help', mod: false, key: '?' }
+  ];
+  function typingIn(el) {
+    return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.isComposing) return;
+    var mod = e.ctrlKey || e.metaKey;
+    var key = (e.key || '').toLowerCase();
+    for (var i = 0; i < KEYS.length; i++) {
+      var k = KEYS[i];
+      if (k.mod) {
+        if (!mod || e.shiftKey !== k.shift || key !== k.key) continue;
+      } else if (mod || e.altKey || key !== k.key || typingIn(e.target)) {
+        continue; // a plain key is a shortcut only outside text fields: "?" typed in the composer is text
+      }
+      e.preventDefault();
+      ACTIONS[k.action]();
+      return;
+    }
+  });
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('[data-open-shortcuts]')) ACTIONS.help();
+  });
+
   // theme: cycles system, light, dark; theme.js (blocking, in <head>) does the work and keeps the choice
   var NEXT = { system: 'light', light: 'dark', dark: 'system' };
   function themeLabel() {
@@ -161,6 +226,12 @@
   function onMutation() {
     var m = messages();
     if (m && stick) m.scrollTop = m.scrollHeight;
+    var rename = document.querySelector('[data-rename-input]'); // the rename field takes the keyboard when it appears
+    if (rename && !rename.hasAttribute('data-focused')) {
+      rename.setAttribute('data-focused', '');
+      rename.focus();
+      rename.select();
+    }
     var ta = textarea();
     if (ta !== lastTextarea) { // the composer was replaced (after a send): keep the keyboard in it
       lastTextarea = ta;

@@ -16,5 +16,6 @@
   <div id="conversation-list">
     @template.sidebarList(groups = groups, query = query)
   </div>
+  <button type="button" class="link-btn" data-open-shortcuts>Keyboard shortcuts</button>
   <p class="sidebar-foot">Conversations are stored as plain text on this machine.</p>
 </nav>
